@@ -1,0 +1,16 @@
+<RCC>
+    <qresource prefix="/">
+        <file>DndHelperDesign/DndHelperDesign/Constants.qml</file>
+        <file>DndHelperDesign/DndHelperDesign/EventListModel.qml</file>
+        <file>DndHelperDesign/DndHelperDesign/EventListSimulator.qml</file>
+        <file>DndHelperDesign/DndHelperDesign/qmldir</file>
+        <file>DndHelperDesign/DndHelperDesignContent/App.qml</file>
+        <file>DndHelperDesign/DndHelperDesignContent/ArrowButton.qml</file>
+        <file>DndHelperDesign/DndHelperDesignContent/Createpers.ui.qml</file>
+        <file>DndHelperDesign/DndHelperDesignContent/Createpers_classes.ui.qml</file>
+        <file>DndHelperDesign/DndHelperDesignContent/DeleteMe.qml</file>
+        <file>DndHelperDesign/DndHelperDesignContent/PageController.qml</file>
+        <file>DndHelperDesign/DndHelperDesignContent/RasaButtonAnimation.qml</file>
+        <file>DndHelperDesign/DndHelperDesignContent/Screen01.ui.qml</file>
+    </qresource>
+</RCC>

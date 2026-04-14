@@ -1,0 +1,273 @@
+[
+  {
+    "name": "Заклинатель",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "",
+    "savingThrowProficiencies": [],
+    "armorProficiencies": [],
+    "weaponProficiencies": []
+  },
+  {
+    "name": "Варвар",
+    "description": "",
+    "hitDie": 12,
+    "primaryAbility": "Сила",
+    "savingThrowProficiencies": [
+      "Сила",
+      "Телосложение"
+    ],
+    "armorProficiencies": [
+      "Лёгкие доспехи",
+      "средние доспехи",
+      "щиты"
+    ],
+    "weaponProficiencies": [
+      "Простое оружие",
+      "воинское оружие"
+    ]
+  },
+  {
+    "name": "Изобретатель",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "Телосложение",
+    "savingThrowProficiencies": [
+      "Телосложение",
+      "Интеллект"
+    ],
+    "armorProficiencies": [
+      "Лёгкие доспехи",
+      "средние доспехи",
+      "щиты"
+    ],
+    "weaponProficiencies": [
+      "Простое оружие"
+    ]
+  },
+  {
+    "name": "Волшебник",
+    "description": "",
+    "hitDie": 6,
+    "primaryAbility": "Интеллект",
+    "savingThrowProficiencies": [
+      "Интеллект",
+      "Мудрость"
+    ],
+    "armorProficiencies": [],
+    "weaponProficiencies": [
+      "Кинжалы",
+      "дротики",
+      "пращи",
+      "боевые посохи",
+      "лёгкие арбалеты"
+    ]
+  },
+  {
+    "name": "Эксперт",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "",
+    "savingThrowProficiencies": [],
+    "armorProficiencies": [],
+    "weaponProficiencies": []
+  },
+  {
+    "name": "Плут",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "Ловкость",
+    "savingThrowProficiencies": [
+      "Ловкость",
+      "Интеллект"
+    ],
+    "armorProficiencies": [
+      "Лёгкие доспехи"
+    ],
+    "weaponProficiencies": [
+      "Простое оружие",
+      "ручные арбалеты",
+      "длинные мечи",
+      "рапиры",
+      "короткие мечи"
+    ]
+  },
+  {
+    "name": "Воин",
+    "description": "",
+    "hitDie": 10,
+    "primaryAbility": "Сила",
+    "savingThrowProficiencies": [
+      "Сила",
+      "Телосложение"
+    ],
+    "armorProficiencies": [
+      "Все доспехи",
+      "щиты"
+    ],
+    "weaponProficiencies": [
+      "Простое оружие",
+      "воинское оружие"
+    ]
+  },
+  {
+    "name": "Следопыт",
+    "description": "",
+    "hitDie": 10,
+    "primaryAbility": "Сила",
+    "savingThrowProficiencies": [
+      "Сила",
+      "Ловкость"
+    ],
+    "armorProficiencies": [
+      "Лёгкие доспехи",
+      "средние доспехи",
+      "щиты"
+    ],
+    "weaponProficiencies": [
+      "Простое оружие",
+      "воинское оружие"
+    ]
+  },
+  {
+    "name": "Друид",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "Интеллект",
+    "savingThrowProficiencies": [
+      "Интеллект",
+      "Мудрость"
+    ],
+    "armorProficiencies": [
+      "Лёгкие доспехи",
+      "средние доспехи",
+      "щиты (друиды не носят доспехи и щиты из металла)"
+    ],
+    "weaponProficiencies": [
+      "Боевые посохи",
+      "булавы",
+      "дротики",
+      "дубинки",
+      "кинжалы",
+      "копья",
+      "метательные копья",
+      "пращи",
+      "серпы",
+      "скимитары"
+    ]
+  },
+  {
+    "name": "Жрец",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "Мудрость",
+    "savingThrowProficiencies": [
+      "Мудрость",
+      "Харизма"
+    ],
+    "armorProficiencies": [
+      "Лёгкие доспехи",
+      "средние доспехи",
+      "щиты"
+    ],
+    "weaponProficiencies": [
+      "Простое оружие"
+    ]
+  },
+  {
+    "name": "Монах",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "Сила",
+    "savingThrowProficiencies": [
+      "Сила",
+      "Ловкость"
+    ],
+    "armorProficiencies": [],
+    "weaponProficiencies": [
+      "Простое оружие",
+      "короткие мечи"
+    ]
+  },
+  {
+    "name": "Бард",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "Ловкость",
+    "savingThrowProficiencies": [
+      "Ловкость",
+      "Харизма"
+    ],
+    "armorProficiencies": [
+      "Лёгкие доспехи"
+    ],
+    "weaponProficiencies": [
+      "Простое оружие",
+      "длинные мечи",
+      "короткие мечи",
+      "рапиры",
+      "ручные арбалеты"
+    ]
+  },
+  {
+    "name": "Боец",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "",
+    "savingThrowProficiencies": [],
+    "armorProficiencies": [],
+    "weaponProficiencies": []
+  },
+  {
+    "name": "Чародей",
+    "description": "",
+    "hitDie": 6,
+    "primaryAbility": "Телосложение",
+    "savingThrowProficiencies": [
+      "Телосложение",
+      "Харизма"
+    ],
+    "armorProficiencies": [],
+    "weaponProficiencies": [
+      "Боевые посохи",
+      "дротики",
+      "кинжалы",
+      "лёгкие арбалеты",
+      "пращи"
+    ]
+  },
+  {
+    "name": "Колдун",
+    "description": "",
+    "hitDie": 8,
+    "primaryAbility": "Мудрость",
+    "savingThrowProficiencies": [
+      "Мудрость",
+      "Харизма"
+    ],
+    "armorProficiencies": [
+      "Лёгкие доспехи"
+    ],
+    "weaponProficiencies": [
+      "Простое оружие"
+    ]
+  },
+  {
+    "name": "Паладин",
+    "description": "",
+    "hitDie": 10,
+    "primaryAbility": "Мудрость",
+    "savingThrowProficiencies": [
+      "Мудрость",
+      "Харизма"
+    ],
+    "armorProficiencies": [
+      "Все виды доспехов",
+      "щиты"
+    ],
+    "weaponProficiencies": [
+      "Простое оружие",
+      "воинское оружие"
+    ]
+  }
+]
