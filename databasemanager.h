@@ -12,6 +12,9 @@
 #include "creature.h"
 #include "race.h"
 #include "class.h"
+#include "background.h"
+#include "character.h"
+#include "feat.h"
 
 class DatabaseManager : public QObject
 {
@@ -48,6 +51,20 @@ public:
     bool addClass(const Class& cls);
     QList<Class> getAllClasses();
     void importClassesFromJson(const QString& filePath);
+
+    // Методы для работы с предысториями
+    bool addBackground(const Background& background);
+    QList<Background> getAllBackgrounds();
+    void importBackgroundsFromJson(const QString& filePath);
+
+    // Методы для работы с чертами
+    bool addFeat(const Feat& feat);
+    QList<Feat> getAllFeats();
+    void importFeatsFromJson(const QString& filePath);
+
+    // Методы для работы с персонажами
+    bool saveCharacter(const QString& campaignName, const Character& character);
+    bool loadCharacter(const QString& campaignName, Character *character);
 
     // Метод для заполнения тестовыми данными
     void populateInitialData();

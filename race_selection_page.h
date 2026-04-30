@@ -45,6 +45,11 @@ private:
     QString resolveSubracesMapPath() const;
     QString detectImagePath(const QString &raceName) const;
     QString shortDescription(const Race &race) const;
+    Race displayRaceForSelection(const QString &raceName) const;
+    Race mergeRaceWithSubrace(const Race &baseRace, const Race &subrace) const;
+    QString parentRaceNameForSubrace(const QString &raceName) const;
+    QMap<QString, QString> displayTraitsForParentRace(const Race &race) const;
+    QStringList subraceOptionsForRace(const QString &raceName) const;
 };
 
 

@@ -17,6 +17,12 @@ ClassCard::ClassCard(const QString &className, const QString &imgNormal, const Q
 {
     ui->setupUi(this);
 
+    ui->cardFrame->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->imageContainer->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->imageLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->descOverlay->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->nameLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
     // Initial Setup
     ui->nameLabel->setText(className);
     ui->descOverlay->setText(desc);
@@ -66,9 +72,11 @@ void ClassCard::updateImage()
             painter.drawPixmap(x, y, scaledPix);
             
             ui->imageLabel->setPixmap(finalPix);
+            ui->imageLabel->setText(QString());
         }
     } else {
-        ui->imageLabel->setText("Img?");
+        ui->imageLabel->clear();
+        ui->imageLabel->setText(QString());
     }
 
     if (isHovered) {

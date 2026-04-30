@@ -13,6 +13,8 @@ int main(int argc, char *argv[])
         // Импорт рас и других данных из JSON, если файлы существуют
         DatabaseManager::instance().importRacesFromJson("races_dndsu.json");
         DatabaseManager::instance().importClassesFromJson("classes_dndsu.json");
+        DatabaseManager::instance().importBackgroundsFromJson("backgrounds_dndsu.json");
+        DatabaseManager::instance().importFeatsFromJson("feats_dndsu.json");
     }
 
     MainWindow w;

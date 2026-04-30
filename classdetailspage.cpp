@@ -4,6 +4,15 @@
 #include <QGroupBox>
 #include <QPixmap>
 
+namespace {
+
+QString signedNumber(int value)
+{
+    return QString("%1%2").arg(value >= 0 ? "+" : "").arg(value);
+}
+
+}
+
 ClassDetailsPage::ClassDetailsPage(QWidget *parent) : QWidget(parent)
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -63,6 +72,16 @@ ClassDetailsPage::ClassDetailsPage(QWidget *parent) : QWidget(parent)
     profLayout->addWidget(weaponsLabel);
     
     contentLayout->addWidget(profGroup);
+
+    QGroupBox *detailsGroup = new QGroupBox("Прогрессия и умения", this);
+    QVBoxLayout *detailsLayout = new QVBoxLayout(detailsGroup);
+
+    detailsText = new QTextEdit(this);
+    detailsText->setReadOnly(true);
+    detailsText->setMinimumHeight(260);
+    detailsLayout->addWidget(detailsText);
+
+    contentLayout->addWidget(detailsGroup);
     
     contentLayout->addStretch();
     
@@ -112,6 +131,46 @@ void ClassDetailsPage::setClass(const Class &cls)
     
     armorLabel->setText(QString("<b>Доспехи:</b> %1").arg(cls.armorProficiencies.join(", ")));
     weaponsLabel->setText(QString("<b>Оружие:</b> %1").arg(cls.weaponProficiencies.join(", ")));
+
+    QStringList details;
+
+    if (!cls.progression.isEmpty()) {
+        details << QStringLiteral("Прогрессия по уровням:");
+        for (const ClassLevelProgression &entry : cls.progression) {
+            details << QStringLiteral("%1 ур. (%2): %3")
+                .arg(entry.level)
+                .arg(signedNumber(entry.proficiencyBonus))
+                .arg(entry.features.isEmpty() ? QStringLiteral("—") : entry.features.join(QStringLiteral(", ")));
+        }
+    }
+
+    if (!cls.featureSections.isEmpty()) {
+        if (!details.isEmpty()) {
+            details << QString();
+        }
+        details << QStringLiteral("Классовые умения:");
+        for (const ClassSection &section : cls.featureSections) {
+            QString line = section.title;
+            if (!section.levelText.trimmed().isEmpty()) {
+                line += QStringLiteral(" — %1").arg(section.levelText.trimmed());
+            }
+            details << line;
+        }
+    }
+
+    if (!cls.subclasses.isEmpty()) {
+        if (!details.isEmpty()) {
+            details << QString();
+        }
+        details << QStringLiteral("Архетипы:");
+        for (const ClassSubclass &subclass : cls.subclasses) {
+            details << subclass.name;
+        }
+    }
+
+    detailsText->setPlainText(details.isEmpty()
+        ? QStringLiteral("Для этого класса пока нет расширенной структуры прогрессии.")
+        : details.join(QStringLiteral("\n")));
 }
 
 Class ClassDetailsPage::currentClass() const

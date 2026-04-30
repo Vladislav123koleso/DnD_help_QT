@@ -5,14 +5,136 @@
 #include <QDebug>
 #include <QDir>
 #include <QCoreApplication>
+#include <QDialog>
+#include <QInputDialog>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QPushButton>
 #include <algorithm>
 
 #include "flowlayout.h"
 
 // ---------------------------------------------------------
+
+namespace {
+
+QString selectionCardDescription(const Race &race)
+{
+    QString text = race.description.simplified();
+    if (text.isEmpty() && !race.traits.isEmpty()) {
+        text = race.traits.first().simplified();
+    }
+    if (text.length() > 90) {
+        text = text.left(87) + "...";
+    }
+    if (text.isEmpty()) {
+        text = QStringLiteral("Описание отсутствует");
+    }
+    return text;
+}
+
+class SubraceSelectionDialog : public QDialog
+{
+public:
+    SubraceSelectionDialog(
+        const QString &baseRaceName,
+        const QMap<QString, Race> &subraceChoices,
+        QWidget *parent = nullptr)
+        : QDialog(parent),
+          m_subraceChoices(subraceChoices)
+    {
+        setWindowTitle(QStringLiteral("Выбор подрасы"));
+        resize(1100, 760);
+
+        QVBoxLayout *mainLayout = new QVBoxLayout(this);
+
+        m_stackedWidget = new QStackedWidget(this);
+        mainLayout->addWidget(m_stackedWidget);
+
+        m_listPage = new QWidget(this);
+        QVBoxLayout *listLayout = new QVBoxLayout(m_listPage);
+
+        QHBoxLayout *headerLayout = new QHBoxLayout();
+        QPushButton *cancelButton = new QPushButton(QStringLiteral("Отмена"), m_listPage);
+        QLabel *titleLabel = new QLabel(QStringLiteral("Выбор подрасы для расы «%1»").arg(baseRaceName), m_listPage);
+        titleLabel->setStyleSheet(QStringLiteral("font-size: 16px; font-weight: bold;"));
+        headerLayout->addWidget(cancelButton);
+        headerLayout->addStretch();
+        headerLayout->addWidget(titleLabel);
+        headerLayout->addStretch();
+        listLayout->addLayout(headerLayout);
+
+        QScrollArea *scrollArea = new QScrollArea(m_listPage);
+        scrollArea->setWidgetResizable(true);
+        scrollArea->setFrameShape(QFrame::NoFrame);
+
+        QWidget *scrollContent = new QWidget(scrollArea);
+        FlowLayout *contentLayout = new FlowLayout(scrollContent, 20, 20, 20);
+
+        QStringList subraceNames = m_subraceChoices.keys();
+        std::sort(subraceNames.begin(), subraceNames.end(), [](const QString &left, const QString &right) {
+            return left.localeAwareCompare(right) < 0;
+        });
+
+        for (const QString &subraceName : subraceNames) {
+            const Race race = m_subraceChoices.value(subraceName);
+            RaceCard *card = new RaceCard(
+                race.name,
+                race.imagePath,
+                race.imagePath,
+                selectionCardDescription(race),
+                scrollContent);
+            connect(card, &RaceCard::raceSelected, this, [this, subraceName](const QString &) {
+                showDetails(subraceName);
+            });
+            contentLayout->addWidget(card);
+        }
+
+        scrollArea->setWidget(scrollContent);
+        listLayout->addWidget(scrollArea);
+
+        m_detailsPage = new RaceDetailsPage(this);
+        connect(m_detailsPage, &RaceDetailsPage::backClicked, this, [this]() {
+            m_stackedWidget->setCurrentWidget(m_listPage);
+        });
+        connect(m_detailsPage, &RaceDetailsPage::continueClicked, this, [this]() {
+            if (m_selectedSubraceName.trimmed().isEmpty()) {
+                return;
+            }
+            m_selectedRace = m_subraceChoices.value(m_selectedSubraceName);
+            accept();
+        });
+
+        m_stackedWidget->addWidget(m_listPage);
+        m_stackedWidget->addWidget(m_detailsPage);
+        m_stackedWidget->setCurrentWidget(m_listPage);
+
+        connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
+    }
+
+    Race selectedRace() const
+    {
+        return m_selectedRace;
+    }
+
+private:
+    void showDetails(const QString &subraceName)
+    {
+        m_selectedSubraceName = subraceName;
+        m_detailsPage->setRace(m_subraceChoices.value(subraceName));
+        m_stackedWidget->setCurrentWidget(m_detailsPage);
+    }
+
+    QMap<QString, Race> m_subraceChoices;
+    QString m_selectedSubraceName;
+    Race m_selectedRace;
+    QStackedWidget *m_stackedWidget = nullptr;
+    QWidget *m_listPage = nullptr;
+    RaceDetailsPage *m_detailsPage = nullptr;
+};
+
+}
 
 RaceSelectionPage::RaceSelectionPage(QWidget *parent) : QWidget(parent) {
     loadRaceData();
@@ -41,14 +163,28 @@ void RaceSelectionPage::loadRaceData()
         const QJsonObject obj = val.toObject();
 
         Race race;
+        race.hasType = obj.contains("type");
+        race.type = obj.value("type").toString(QStringLiteral("race")).trimmed().toLower();
+        if (race.type.isEmpty()) {
+            race.type = QStringLiteral("race");
+        }
+        race.hasSlug = obj.contains("slug");
+        race.slug = obj.value("slug").toString().trimmed();
         race.name = obj.value("name").toString().trimmed();
+        race.hasSource = obj.contains("source");
+        race.source = obj.value("source").toString().trimmed();
+        race.hasDescription = obj.contains("description");
         race.description = obj.value("description").toString().trimmed();
+        race.hasSpeed = obj.contains("speed");
         race.speed = obj.value("speed").toInt(30);
+        race.hasFlyingSpeed = obj.contains("flyingSpeed");
         race.flyingSpeed = obj.value("flyingSpeed").toInt(0);
+        race.hasSize = obj.contains("size");
         race.size = obj.value("size").toString("Средний");
         race.imagePath = detectImagePath(race.name);
 
         const QJsonObject asi = obj.value("asi").toObject();
+        race.hasAbilityScoreIncrease = obj.contains("asi") && !asi.isEmpty();
         race.abilityScoreIncrease["Strength"] = asi.value("str").toInt(0);
         race.abilityScoreIncrease["Dexterity"] = asi.value("dex").toInt(0);
         race.abilityScoreIncrease["Constitution"] = asi.value("con").toInt(0);
@@ -57,11 +193,13 @@ void RaceSelectionPage::loadRaceData()
         race.abilityScoreIncrease["Charisma"] = asi.value("cha").toInt(0);
 
         const QJsonObject traitsObj = obj.value("traits").toObject();
+        race.hasTraits = obj.contains("traits") && !traitsObj.isEmpty();
         for (auto it = traitsObj.begin(); it != traitsObj.end(); ++it) {
             race.traits.insert(it.key(), it.value().toString());
         }
 
         const QJsonArray langs = obj.value("languages").toArray();
+        race.hasLanguages = obj.contains("languages") && !langs.isEmpty();
         for (const QJsonValue &lang : langs) {
             const QString s = lang.toString().trimmed();
             if (!s.isEmpty()) {
@@ -139,7 +277,19 @@ QString RaceSelectionPage::resolveSubracesMapPath() const
 
 QString RaceSelectionPage::detectImagePath(const QString &raceName) const
 {
-    const QString basePath = "D:/repos/qt/DnD_help/DndHelperDesign/DndHelperDesignContent/images/race/";
+    QString basePath;
+    QDir dir(QCoreApplication::applicationDirPath());
+    for (int i = 0; i < 6; ++i) {
+        if (dir.exists("DndHelperDesign/DndHelperDesignContent/images/race")) {
+            basePath = dir.filePath("DndHelperDesign/DndHelperDesignContent/images/race/");
+            break;
+        }
+        if (!dir.cdUp()) break;
+    }
+    
+    if (basePath.isEmpty()) {
+        basePath = "DndHelperDesign/DndHelperDesignContent/images/race/";
+    }
 
     const QMap<QString, QString> explicitMap = {
         {"Эльф", "elf.jpg"},
@@ -165,17 +315,166 @@ QString RaceSelectionPage::detectImagePath(const QString &raceName) const
 
 QString RaceSelectionPage::shortDescription(const Race &race) const
 {
-    QString text = race.description.simplified();
-    if (text.isEmpty() && !race.traits.isEmpty()) {
-        text = race.traits.first().simplified();
+    return selectionCardDescription(race);
+}
+
+QMap<QString, QString> RaceSelectionPage::displayTraitsForParentRace(const Race &race) const
+{
+    if (race.name != QStringLiteral("Эльф")) {
+        return race.traits;
     }
-    if (text.length() > 90) {
-        text = text.left(87) + "...";
+
+    static const QStringList allowedTitles = {
+        QStringLiteral("Увеличение характеристик"),
+        QStringLiteral("Тёмное зрение"),
+        QStringLiteral("Обострённые чувства"),
+        QStringLiteral("Наследие фей"),
+        QStringLiteral("Транс")
+    };
+
+    QMap<QString, QString> filtered;
+    for (auto it = race.traits.begin(); it != race.traits.end(); ++it) {
+        if (allowedTitles.contains(it.key())) {
+            filtered.insert(it.key(), it.value());
+        }
     }
-    if (text.isEmpty()) {
-        text = "Описание отсутствует";
+    return filtered;
+}
+
+Race RaceSelectionPage::displayRaceForSelection(const QString &raceName) const
+{
+    Race race = raceData.value(raceName);
+    if (!subraceGroups.contains(raceName)) {
+        const QString parentRaceName = parentRaceNameForSubrace(raceName);
+        if (!parentRaceName.isEmpty()) {
+            return mergeRaceWithSubrace(raceData.value(parentRaceName), race);
+        }
+        return race;
     }
-    return text;
+
+    race.traits = displayTraitsForParentRace(race);
+    if (raceName == QStringLiteral("Эльф")) {
+        const QString note = QStringLiteral("\n\nПри продолжении выберите конкретную подрасу эльфа.");
+        if (!race.description.contains(note)) {
+            race.description += note;
+        }
+    }
+    return race;
+}
+
+QString RaceSelectionPage::parentRaceNameForSubrace(const QString &raceName) const
+{
+    const QString trimmedRaceName = raceName.trimmed();
+    for (auto it = subraceGroups.begin(); it != subraceGroups.end(); ++it) {
+        if (it.key().compare(trimmedRaceName, Qt::CaseInsensitive) == 0) {
+            continue;
+        }
+        if (it.value().contains(trimmedRaceName, Qt::CaseInsensitive)) {
+            return it.key();
+        }
+    }
+    return QString();
+}
+
+Race RaceSelectionPage::mergeRaceWithSubrace(const Race &baseRace, const Race &subrace) const
+{
+    Race merged = baseRace;
+
+    if (subrace.hasSlug && !subrace.slug.trimmed().isEmpty()) {
+        merged.slug = subrace.slug;
+        merged.hasSlug = true;
+    }
+
+    if (!subrace.name.trimmed().isEmpty()) {
+        merged.name = subrace.name.trimmed();
+    }
+
+    if (subrace.hasType && !subrace.type.trimmed().isEmpty()) {
+        merged.type = subrace.type.trimmed().toLower();
+        merged.hasType = true;
+    }
+
+    if (subrace.hasSource && !subrace.source.trimmed().isEmpty()) {
+        merged.source = subrace.source.trimmed();
+        merged.hasSource = true;
+    }
+
+    if (subrace.hasDescription && !subrace.description.trimmed().isEmpty()) {
+        const QString subraceDescription = subrace.description.trimmed();
+        if (merged.description.trimmed().isEmpty()) {
+            merged.description = subraceDescription;
+        } else if (merged.description.trimmed() != subraceDescription) {
+            merged.description += QStringLiteral("\n\n") + subraceDescription;
+        }
+        merged.hasDescription = true;
+    }
+
+    if (subrace.hasSize && !subrace.size.trimmed().isEmpty()) {
+        merged.size = subrace.size.trimmed();
+        merged.hasSize = true;
+    }
+
+    if (subrace.hasSpeed) {
+        merged.speed = subrace.speed;
+        merged.hasSpeed = true;
+    }
+
+    if (subrace.hasFlyingSpeed) {
+        merged.flyingSpeed = subrace.flyingSpeed;
+        merged.hasFlyingSpeed = true;
+    }
+
+    if (subrace.hasAbilityScoreIncrease) {
+        for (auto it = subrace.abilityScoreIncrease.begin(); it != subrace.abilityScoreIncrease.end(); ++it) {
+            merged.abilityScoreIncrease[it.key()] = merged.abilityScoreIncrease.value(it.key(), 0) + it.value();
+        }
+        merged.hasAbilityScoreIncrease = true;
+    }
+
+    if (subrace.hasTraits) {
+        for (auto it = subrace.traits.begin(); it != subrace.traits.end(); ++it) {
+            merged.traits.insert(it.key(), it.value());
+        }
+        merged.hasTraits = true;
+    }
+
+    if (subrace.hasLanguages) {
+        for (const QString &language : subrace.languages) {
+            if (!language.trimmed().isEmpty() && !merged.languages.contains(language)) {
+                merged.languages << language;
+            }
+        }
+        merged.hasLanguages = true;
+    }
+
+    if (!subrace.imagePath.trimmed().isEmpty()) {
+        merged.imagePath = subrace.imagePath;
+    }
+
+    if (!baseRace.subraces.isEmpty()) {
+        merged.subraces = baseRace.subraces;
+    } else {
+        merged.subraces = subrace.subraces;
+    }
+
+    if (merged.description.trimmed().isEmpty()) {
+        if (!merged.traits.isEmpty()) {
+            merged.description = merged.traits.first();
+        } else {
+            merged.description = QStringLiteral("Описание отсутствует.");
+        }
+    }
+
+    return merged;
+}
+
+QStringList RaceSelectionPage::subraceOptionsForRace(const QString &raceName) const
+{
+    QStringList options = subraceGroups.value(raceName);
+    if (raceName == QStringLiteral("Эльф")) {
+        options.removeAll(raceName);
+    }
+    return options;
 }
 
 void RaceSelectionPage::buildSubraceGroups()
@@ -250,6 +549,10 @@ void RaceSelectionPage::setupUi() {
     FlowLayout *contentLayout = new FlowLayout(scrollContent, 20, 20, 20);
 
     QStringList raceNames = raceData.keys();
+    raceNames.erase(std::remove_if(raceNames.begin(), raceNames.end(), [this](const QString &raceName) {
+        const QString raceType = raceData.value(raceName).type.trimmed().toLower();
+        return raceType == QStringLiteral("subrace");
+    }), raceNames.end());
     std::sort(raceNames.begin(), raceNames.end(), [](const QString &a, const QString &b) {
         return a.localeAwareCompare(b) < 0;
     });
@@ -280,7 +583,7 @@ void RaceSelectionPage::setupUi() {
 void RaceSelectionPage::onRaceSelected(const QString &raceName)
 {
     if (raceData.contains(raceName)) {
-        detailsPage->setRace(raceData[raceName]);
+        detailsPage->setRace(displayRaceForSelection(raceName));
         stackedWidget->setCurrentWidget(detailsPage);
     } else {
         qDebug() << "Race data not found for:" << raceName;
@@ -294,7 +597,30 @@ void RaceSelectionPage::showList()
 
 void RaceSelectionPage::confirmSelection()
 {
-    emit raceChosen(detailsPage->currentRace());
+    Race selectedRace = detailsPage->currentRace();
+    const QString selectedName = selectedRace.name.trimmed();
+    const QStringList options = subraceOptionsForRace(selectedName);
+
+    if (options.size() > 1) {
+        const Race baseRace = raceData.value(selectedName, selectedRace);
+        QMap<QString, Race> subraceChoices;
+        for (const QString &subraceName : options) {
+            const Race subrace = raceData.value(subraceName);
+            if (subrace.name.trimmed().isEmpty()) {
+                continue;
+            }
+            subraceChoices.insert(subraceName, mergeRaceWithSubrace(baseRace, subrace));
+        }
+
+        SubraceSelectionDialog dialog(selectedName, subraceChoices, this);
+        if (dialog.exec() != QDialog::Accepted) {
+            return;
+        }
+
+        selectedRace = dialog.selectedRace();
+    }
+
+    emit raceChosen(selectedRace);
 }
 
 Race RaceSelectionPage::getRaceData(const QString &name)

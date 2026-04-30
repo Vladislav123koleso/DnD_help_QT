@@ -32,6 +32,9 @@ private:
    
    QMap<QString, Class> classData;
    void loadClassData();
+    QString resolveClassesJsonPath() const;
+    QString detectImagePath(const QString &classSlug) const;
+    QString shortDescription(const Class &cls) const;
 };
 
 #endif // CLASS_SELECTION_PAGE_H

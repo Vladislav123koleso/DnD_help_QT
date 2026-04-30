@@ -2,6 +2,14 @@
 #include <QVBoxLayout>
 #include <QScrollArea>
 #include <QDebug>
+#include <QDir>
+#include <QCoreApplication>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLabel>
 #include "flowlayout.h"
 
 ClassSelectionPage::ClassSelectionPage(QWidget *parent) : QWidget(parent) {
@@ -11,43 +19,97 @@ ClassSelectionPage::ClassSelectionPage(QWidget *parent) : QWidget(parent) {
 
 void ClassSelectionPage::loadClassData()
 {
-    QString basePath = "D:/repos/qt/DnD_help/DndHelperDesign/DndHelperDesignContent/images/class/";
+    classData.clear();
 
-    // Fighter (Воин)
-    Class fighter;
-    fighter.name = "Воин";
-    fighter.description = "Мастер боевых искусств, владеющий разнообразным оружием и доспехами.";
-    fighter.hitDie = 10;
-    fighter.primaryAbility = "Сила или Ловкость";
-    fighter.savingThrowProficiencies << "Сила" << "Телосложение";
-    fighter.armorProficiencies << "Все доспехи" << "Щиты";
-    fighter.weaponProficiencies << "Простое оружие" << "Воинское оружие";
-    fighter.imagePath = basePath + "fighter.jpg";
-    classData["Воин"] = fighter;
+    const QString jsonPath = resolveClassesJsonPath();
+    QFile file(jsonPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "Не удалось открыть classes_dndsu.json:" << jsonPath;
+        return;
+    }
 
-    // Rogue (Плут)
-    Class rogue;
-    rogue.name = "Плут";
-    rogue.description = "Преступник, использующий скрытность и хитрость для преодоления препятствий и врагов.";
-    rogue.hitDie = 8;
-    rogue.primaryAbility = "Ловкость";
-    rogue.savingThrowProficiencies << "Ловкость" << "Интеллект";
-    rogue.armorProficiencies << "Легкие доспехи";
-    rogue.weaponProficiencies << "Простое оружие" << "Ручные арбалеты" << "Длинные мечи" << "Рапиры" << "Короткие мечи";
-    rogue.imagePath = basePath + "rogue.jpg";
-    classData["Плут"] = rogue;
-    
-    // Wizard (Волшебник)
-    Class wizard;
-    wizard.name = "Волшебник";
-    wizard.description = "Ученый маг, способный изменять структуру реальности.";
-    wizard.hitDie = 6;
-    wizard.primaryAbility = "Интеллект";
-    wizard.savingThrowProficiencies << "Интеллект" << "Мудрость";
-    wizard.armorProficiencies << "Нет";
-    wizard.weaponProficiencies << "Боевые посохи" << "Дротики" << "Пращи" << "Кинжалы" << "Легкие арбалеты";
-    wizard.imagePath = basePath + "wizard.jpg";
-    classData["Волшебник"] = wizard;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (!doc.isArray()) {
+        qDebug() << "Некорректный формат classes_dndsu.json";
+        return;
+    }
+
+    const QJsonArray classesArray = doc.array();
+    for (const QJsonValue &value : classesArray) {
+        Class cls = Class::fromJson(value.toObject());
+        cls.imagePath = detectImagePath(cls.slug);
+
+        if (!cls.name.isEmpty()) {
+            classData.insert(cls.name, cls);
+        }
+    }
+}
+
+QString ClassSelectionPage::resolveClassesJsonPath() const
+{
+    QStringList candidates;
+    candidates << "classes_dndsu.json";
+    candidates << QDir::current().filePath("classes_dndsu.json");
+
+    QDir appDir(QCoreApplication::applicationDirPath());
+    candidates << appDir.filePath("classes_dndsu.json");
+
+    QDir dir = appDir;
+    for (int i = 0; i < 6; ++i) {
+        candidates << dir.filePath("classes_dndsu.json");
+        if (!dir.cdUp()) {
+            break;
+        }
+    }
+
+    for (const QString &candidate : candidates) {
+        if (QFile::exists(candidate)) {
+            return candidate;
+        }
+    }
+
+    return "classes_dndsu.json";
+}
+
+QString ClassSelectionPage::detectImagePath(const QString &classSlug) const
+{
+    QString basePath;
+    QDir dir(QCoreApplication::applicationDirPath());
+    for (int i = 0; i < 6; ++i) {
+        if (dir.exists("DndHelperDesign/DndHelperDesignContent/images/class")) {
+            basePath = dir.filePath("DndHelperDesign/DndHelperDesignContent/images/class/");
+            break;
+        }
+        if (!dir.cdUp()) {
+            break;
+        }
+    }
+
+    if (basePath.isEmpty() || classSlug.trimmed().isEmpty()) {
+        return QString();
+    }
+
+    const QStringList extensions = {"jpg", "png", "webp", "jpeg"};
+    for (const QString &extension : extensions) {
+        const QString candidate = basePath + classSlug + "." + extension;
+        if (QFile::exists(candidate)) {
+            return candidate;
+        }
+    }
+
+    return QString();
+}
+
+QString ClassSelectionPage::shortDescription(const Class &cls) const
+{
+    QString text = cls.description.simplified();
+    if (text.length() > 90) {
+        text = text.left(87) + "...";
+    }
+    if (text.isEmpty()) {
+        text = QStringLiteral("Описание отсутствует");
+    }
+    return text;
 }
 
 void ClassSelectionPage::setupUi() {
@@ -67,22 +129,29 @@ void ClassSelectionPage::setupUi() {
     QWidget *scrollContent = new QWidget();
     FlowLayout *contentLayout = new FlowLayout(scrollContent, 20, 20, 20);
 
-    QString basePath = "D:/repos/qt/DnD_help/DndHelperDesign/DndHelperDesignContent/images/class/";
-    
-    // Fighter
-    ClassCard *fighterCard = new ClassCard("Воин", basePath + "fighter.jpg", basePath + "fighter_hover.jpg", "Мастер оружия", scrollContent);
-    connect(fighterCard, &ClassCard::classSelected, this, &ClassSelectionPage::onClassSelected);
-    contentLayout->addWidget(fighterCard);
+    const QStringList classNames = classData.keys();
+    if (classNames.isEmpty()) {
+        QLabel *emptyLabel = new QLabel("Список классов не загружен.", scrollContent);
+        emptyLabel->setAlignment(Qt::AlignCenter);
+        contentLayout->addWidget(emptyLabel);
+    } else {
+        for (const QString &className : classNames) {
+            const Class cls = classData.value(className);
 
-    // Rogue
-    ClassCard *rogueCard = new ClassCard("Плут", basePath + "rogue.jpg", basePath + "rogue_hover.jpg", "Мастер скрытности", scrollContent);
-    connect(rogueCard, &ClassCard::classSelected, this, &ClassSelectionPage::onClassSelected);
-    contentLayout->addWidget(rogueCard);
-    
-    // Wizard
-    ClassCard *wizardCard = new ClassCard("Волшебник", basePath + "wizard.jpg", basePath + "wizard_hover.jpg", "Мастер магии", scrollContent);
-    connect(wizardCard, &ClassCard::classSelected, this, &ClassSelectionPage::onClassSelected);
-    contentLayout->addWidget(wizardCard);
+            QString hoverImagePath = cls.imagePath;
+            if (!cls.imagePath.isEmpty()) {
+                const QFileInfo info(cls.imagePath);
+                const QString hoverCandidate = info.path() + "/" + info.completeBaseName() + "_hover." + info.suffix();
+                if (QFile::exists(hoverCandidate)) {
+                    hoverImagePath = hoverCandidate;
+                }
+            }
+
+            ClassCard *card = new ClassCard(className, cls.imagePath, hoverImagePath, shortDescription(cls), scrollContent);
+            connect(card, &ClassCard::classSelected, this, &ClassSelectionPage::onClassSelected);
+            contentLayout->addWidget(card);
+        }
+    }
 
     scrollArea->setWidget(scrollContent);
     listLayout->addWidget(scrollArea);

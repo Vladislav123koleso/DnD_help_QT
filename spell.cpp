@@ -11,5 +11,6 @@ Spell::Spell() :
     duration(""),
     description(""),
     classes(""),
+    selectionClass(""),
     upper("")
 {}

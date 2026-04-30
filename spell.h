@@ -17,6 +17,7 @@ public:
     QString description;
     QString classes;
     QString subclasses;
+    QString selectionClass;
     QString source;
     QString upper; // Накладывание более высокой ячейкой
 };

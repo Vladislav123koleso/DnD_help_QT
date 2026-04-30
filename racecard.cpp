@@ -8,16 +8,42 @@
  #include <QPainter>
 #include <QPainterPath>
 
+#include <QPushButton>
+
 #include <QTimer>
 
 RaceCard::RaceCard(const QString &raceName, const QString &imgNormal, const QString &imgHover, const QString &desc, QWidget *parent) :
     QWidget(parent),
     ui(new Ui::RaceCard),
+    selectButton(nullptr),
     pathNormal(imgNormal),
     pathHover(imgHover),
     isHovered(false)
 {
     ui->setupUi(this);
+
+    ui->cardFrame->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->imageContainer->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->imageLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->descOverlay->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    ui->nameLabel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+    const QList<QWidget *> descendants = findChildren<QWidget *>();
+    for (QWidget *child : descendants) {
+        child->installEventFilter(this);
+    }
+
+    selectButton = new QPushButton(this);
+    selectButton->setFlat(true);
+    selectButton->setCursor(Qt::PointingHandCursor);
+    selectButton->setFocusPolicy(Qt::NoFocus);
+    selectButton->setStyleSheet("background: transparent; border: none;");
+    selectButton->setGeometry(rect());
+    selectButton->raise();
+    selectButton->installEventFilter(this);
+    connect(selectButton, &QPushButton::clicked, this, [this]() {
+        emit raceSelected(ui->nameLabel->text());
+    });
 
     // Initial Setup
     ui->nameLabel->setText(raceName);
@@ -107,9 +133,36 @@ void RaceCard::leaveEvent(QEvent *event)
     QWidget::leaveEvent(event);
 }
 
+bool RaceCard::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == selectButton) {
+        if (event->type() == QEvent::Enter) {
+            isHovered = true;
+            updateImage();
+        } else if (event->type() == QEvent::Leave) {
+            isHovered = false;
+            updateImage();
+        }
+    }
+
+    if (watched != this && watched != selectButton && event->type() == QEvent::MouseButtonPress) {
+        const auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() == Qt::LeftButton) {
+            emit raceSelected(ui->nameLabel->text());
+            return true;
+        }
+    }
+
+    return QWidget::eventFilter(watched, event);
+}
+
 void RaceCard::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    if (selectButton) {
+        selectButton->setGeometry(rect());
+        selectButton->raise();
+    }
     updateImage(); // Regenerate image with new size
 }
 
@@ -124,6 +177,10 @@ void RaceCard::mousePressEvent(QMouseEvent *event)
 void RaceCard::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
+    if (selectButton) {
+        selectButton->setGeometry(rect());
+        selectButton->raise();
+    }
     updateImage(); // Ensure image is updated when widget is shown
 }
 

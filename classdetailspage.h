@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <QPushButton>
+#include <QTextEdit>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScrollArea>
@@ -30,6 +31,7 @@ private:
    QLabel *savesLabel;
    QLabel *armorLabel;
    QLabel *weaponsLabel;
+    QTextEdit *detailsText;
 
    QPushButton *backButton;
    QPushButton *continueButton;

@@ -19,6 +19,8 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 SOURCES += \
+    background.cpp \
+    characterprogressionrules.cpp \
     character.cpp \
     main.cpp \
     mainwindow.cpp \
@@ -35,6 +37,7 @@ SOURCES += \
     itembookwidget.cpp \
     creature.cpp \
     bestiarywidget.cpp \
+    feat.cpp \
     race_selection_page.cpp \
     racedetailspage.cpp \
     class_selection_page.cpp \
@@ -45,6 +48,8 @@ SOURCES += \
     charactersheet.cpp
 
 HEADERS += \
+    background.h \
+    characterprogressionrules.h \
     character.h \
     mainwindow.h \
     startpage.h \
@@ -60,6 +65,7 @@ HEADERS += \
     itembookwidget.h \
     creature.h \
     bestiarywidget.h \
+    feat.h \
     race_selection_page.h \
     racedetailspage.h \
     class_selection_page.h \

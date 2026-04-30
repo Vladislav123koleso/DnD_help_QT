@@ -8,6 +8,165 @@
 #include <QJsonObject>
 #include <QFile>
 
+namespace {
+
+QMap<QString, int> elfAbilityBonuses(int dexterity, int intelligence, int wisdom, int charisma, int strength)
+{
+    return {
+        {QStringLiteral("Strength"), strength},
+        {QStringLiteral("Dexterity"), dexterity},
+        {QStringLiteral("Constitution"), 0},
+        {QStringLiteral("Intelligence"), intelligence},
+        {QStringLiteral("Wisdom"), wisdom},
+        {QStringLiteral("Charisma"), charisma}
+    };
+}
+
+QMap<QString, QString> baseElfTraits()
+{
+    return {
+        {QStringLiteral("Увеличение характеристик"), QStringLiteral("Ловкость +2.")},
+        {QStringLiteral("Тёмное зрение"), QStringLiteral("Вы видите в темноте на 60 футов как при тусклом освещении и различаете только оттенки серого.")},
+        {QStringLiteral("Обострённые чувства"), QStringLiteral("Вы владеете навыком Восприятие.")},
+        {QStringLiteral("Наследие фей"), QStringLiteral("Вы совершаете с преимуществом спасброски против состояния очарованный, и магия не может вас усыпить.")},
+        {QStringLiteral("Транс"), QStringLiteral("Вместо сна вы медитируете 4 часа и получаете преимущества продолжительного отдыха.")},
+        {QStringLiteral("Языки"), QStringLiteral("Вы говорите, читаете и пишете на Общем и Эльфийском.")}
+    };
+}
+
+Race normalizedBaseElf(const Race &sourceRace)
+{
+    Race race = sourceRace;
+    race.slug = QStringLiteral("race/79-elf");
+    race.name = QStringLiteral("Эльф");
+    race.source = QStringLiteral("Player's Handbook");
+    race.abilityScoreIncrease = elfAbilityBonuses(2, 0, 0, 0, 0);
+    race.speed = 30;
+    race.flyingSpeed = 0;
+    race.size = QStringLiteral("Средний");
+    race.traits = baseElfTraits();
+    race.languages = {QStringLiteral("Общий"), QStringLiteral("Эльфийский")};
+    return race;
+}
+
+Race legacyElfVariant(
+    const Race &sourceRace,
+    const QString &slug,
+    const QString &name,
+    const QString &source,
+    const QString &description,
+    const QMap<QString, int> &asi,
+    const QMap<QString, QString> &extraTraits,
+    const QStringList &languages = {})
+{
+    Race race = normalizedBaseElf(sourceRace);
+    race.slug = slug;
+    race.name = name;
+    race.source = source;
+    race.description = description;
+    race.abilityScoreIncrease = asi;
+    for (auto it = extraTraits.begin(); it != extraTraits.end(); ++it) {
+        race.traits.insert(it.key(), it.value());
+    }
+    if (!languages.isEmpty()) {
+        race.languages = languages;
+    }
+    return race;
+}
+
+QList<Race> normalizedImportedRaces(const QList<Race> &races)
+{
+    QList<Race> normalized;
+    QStringList raceNames;
+    Race elfSource;
+    bool hasElf = false;
+
+    for (const Race &race : races) {
+        if (race.name == QStringLiteral("Эльф")) {
+            elfSource = race;
+            hasElf = true;
+            const Race cleanedElf = normalizedBaseElf(race);
+            normalized.append(cleanedElf);
+            raceNames << cleanedElf.name;
+            continue;
+        }
+
+        normalized.append(race);
+        raceNames << race.name;
+    }
+
+    if (!hasElf) {
+        return normalized;
+    }
+
+    const auto appendIfMissing = [&](const Race &race) {
+        if (!raceNames.contains(race.name)) {
+            normalized.append(race);
+            raceNames << race.name;
+        }
+    };
+
+    appendIfMissing(legacyElfVariant(
+        elfSource,
+        QStringLiteral("race/79-high-elf"),
+        QStringLiteral("Высший эльф"),
+        QStringLiteral("Player's Handbook"),
+        QStringLiteral("Высшие эльфы развивают магию и изящное владение традиционным оружием."),
+        elfAbilityBonuses(2, 1, 0, 0, 0),
+        {
+            {QStringLiteral("Увеличение характеристик"), QStringLiteral("Ловкость +2, Интеллект +1.")},
+            {QStringLiteral("Владение эльфийским оружием"), QStringLiteral("Вы владеете длинным мечом, коротким мечом, длинным луком и коротким луком.")},
+            {QStringLiteral("Заговор"), QStringLiteral("Вы знаете один заговор из списка волшебника. Базовая характеристика для него — Интеллект.")},
+            {QStringLiteral("Дополнительный язык"), QStringLiteral("Вы знаете ещё один язык по выбору.")}
+        },
+        {QStringLiteral("Общий"), QStringLiteral("Эльфийский"), QStringLiteral("Дополнительный язык по выбору")}));
+
+    appendIfMissing(legacyElfVariant(
+        elfSource,
+        QStringLiteral("race/79-wood-elf"),
+        QStringLiteral("Лесной эльф"),
+        QStringLiteral("Player's Handbook"),
+        QStringLiteral("Лесные эльфы быстрее других эльфов и лучше скрываются среди природных укрытий."),
+        elfAbilityBonuses(2, 0, 1, 0, 0),
+        {
+            {QStringLiteral("Увеличение характеристик"), QStringLiteral("Ловкость +2, Мудрость +1.")},
+            {QStringLiteral("Быстрые ноги"), QStringLiteral("Ваша скорость ходьбы увеличивается до 35 футов.")},
+            {QStringLiteral("Маскировка в дикой местности"), QStringLiteral("Вы можете прятаться, если вас слабо скрывают листва, снег, дождь, туман и другие природные явления.")}
+        }));
+
+    appendIfMissing(legacyElfVariant(
+        elfSource,
+        QStringLiteral("race/79-drow"),
+        QStringLiteral("Дроу"),
+        QStringLiteral("Player's Handbook"),
+        QStringLiteral("Дроу приспособлены к Подземью, владеют особой магией и страдают от яркого солнечного света."),
+        elfAbilityBonuses(2, 0, 0, 1, 0),
+        {
+            {QStringLiteral("Увеличение характеристик"), QStringLiteral("Ловкость +2, Харизма +1.")},
+            {QStringLiteral("Превосходное тёмное зрение"), QStringLiteral("Ваше тёмное зрение увеличивается до 120 футов.")},
+            {QStringLiteral("Чувствительность к солнцу"), QStringLiteral("При прямом солнечном свете вы получаете помеху на броски атаки и проверки Восприятия, основанные на зрении.")},
+            {QStringLiteral("Магия дроу"), QStringLiteral("С 3 уровня вы можете накладывать Огонь фей, а с 5 уровня — Тьму, восстанавливая использование после продолжительного отдыха.")},
+            {QStringLiteral("Владение оружием дроу"), QStringLiteral("Вы владеете рапирой, коротким мечом и ручным арбалетом.")}
+        }));
+
+    appendIfMissing(legacyElfVariant(
+        elfSource,
+        QStringLiteral("race/79-grugach"),
+        QStringLiteral("Гругач"),
+        QStringLiteral("Mordenkainen's Tome of Foes"),
+        QStringLiteral("Гругачи — дикие эльфы, полагающиеся на силу, оружейную выучку и простую магию природы."),
+        elfAbilityBonuses(2, 0, 0, 0, 1),
+        {
+            {QStringLiteral("Увеличение характеристик"), QStringLiteral("Ловкость +2, Сила +1.")},
+            {QStringLiteral("Боевая подготовка гругачей"), QStringLiteral("Вы владеете копьём, коротким луком, длинным луком и сетью.")},
+            {QStringLiteral("Заговор"), QStringLiteral("Вы знаете один заговор из списка друида. Базовая характеристика для него — Мудрость.")}
+        }));
+
+    return normalized;
+}
+
+} // namespace
+
 DatabaseManager& DatabaseManager::instance()
 {
     static DatabaseManager instance;
@@ -101,13 +260,16 @@ QList<Creature> DatabaseManager::getAllCreatures()
 bool DatabaseManager::addRace(const Race& race)
 {
     QSqlQuery query;
-    query.prepare("INSERT INTO races (name, description, speed, size, "
+    query.prepare("INSERT INTO races (slug, name, source, description, speed, flying_speed, size, "
                   "asi_str, asi_dex, asi_con, asi_int, asi_wis, asi_cha, traits, languages) "
-                  "VALUES (:name, :desc, :speed, :size, :s, :d, :co, :i, :w, :ch, :traits, :langs)");
+                  "VALUES (:slug, :name, :source, :desc, :speed, :flying_speed, :size, :s, :d, :co, :i, :w, :ch, :traits, :langs)");
     
+    query.bindValue(":slug", race.slug);
     query.bindValue(":name", race.name);
+    query.bindValue(":source", race.source);
     query.bindValue(":desc", race.description);
     query.bindValue(":speed", race.speed);
+    query.bindValue(":flying_speed", race.flyingSpeed);
     query.bindValue(":size", race.size);
     
     query.bindValue(":s", race.abilityScoreIncrease.value("Strength", 0));
@@ -161,13 +323,17 @@ void DatabaseManager::importRacesFromJson(const QString& filePath)
     QSqlDatabase::database().transaction();
     QSqlQuery("DELETE FROM races").exec();
     
-    QJsonArray arr = doc.array();
+    QList<Race> importedRaces;
+    const QJsonArray arr = doc.array();
     for (const QJsonValue &val : arr) {
         QJsonObject obj = val.toObject();
         Race r;
+        r.slug = obj["slug"].toString();
         r.name = obj["name"].toString();
+        r.source = obj["source"].toString();
         r.description = obj["description"].toString();
         r.speed = obj["speed"].toInt();
+        r.flyingSpeed = obj["flyingSpeed"].toInt();
         r.size = obj["size"].toString();
         
         QJsonObject asi = obj["asi"].toObject();
@@ -186,7 +352,12 @@ void DatabaseManager::importRacesFromJson(const QString& filePath)
         QJsonArray langs = obj["languages"].toArray();
         for(const QJsonValue &l : langs) r.languages.append(l.toString());
         
-        addRace(r);
+        importedRaces.append(r);
+    }
+
+    const QList<Race> normalizedRaces = normalizedImportedRaces(importedRaces);
+    for (const Race &race : normalizedRaces) {
+        addRace(race);
     }
     
     QSqlDatabase::database().commit();
@@ -199,9 +370,12 @@ QList<Race> DatabaseManager::getAllRaces()
     QSqlQuery query("SELECT * FROM races");
     while (query.next()) {
         Race r;
+        r.slug = query.value("slug").toString();
         r.name = query.value("name").toString();
+        r.source = query.value("source").toString();
         r.description = query.value("description").toString();
         r.speed = query.value("speed").toInt();
+        r.flyingSpeed = query.value("flying_speed").toInt();
         r.size = query.value("size").toString();
         
         r.abilityScoreIncrease["Strength"] = query.value("asi_str").toInt();
@@ -231,11 +405,13 @@ QList<Race> DatabaseManager::getAllRaces()
 bool DatabaseManager::addClass(const Class& cls)
 {
     QSqlQuery query;
-    query.prepare("INSERT INTO classes (name, description, hit_die, primary_ability, "
+    query.prepare("INSERT INTO classes (slug, name, source, description, hit_die, primary_ability, "
                   "saving_throws, armor_prof, weapon_prof, features) "
-                  "VALUES (:name, :desc, :hd, :pa, :st, :ap, :wp, :feat)");
+                  "VALUES (:slug, :name, :source, :desc, :hd, :pa, :st, :ap, :wp, :feat)");
                   
+    query.bindValue(":slug", cls.slug);
     query.bindValue(":name", cls.name);
+    query.bindValue(":source", cls.source);
     query.bindValue(":desc", cls.description);
     query.bindValue(":hd", cls.hitDie);
     query.bindValue(":pa", cls.primaryAbility);
@@ -243,8 +419,7 @@ bool DatabaseManager::addClass(const Class& cls)
     query.bindValue(":st", QJsonDocument(QJsonArray::fromStringList(cls.savingThrowProficiencies)).toJson(QJsonDocument::Compact));
     query.bindValue(":ap", QJsonDocument(QJsonArray::fromStringList(cls.armorProficiencies)).toJson(QJsonDocument::Compact));
     query.bindValue(":wp", QJsonDocument(QJsonArray::fromStringList(cls.weaponProficiencies)).toJson(QJsonDocument::Compact));
-     // Features not fully implemented in Class struct yet, storing empty JSON for now
-    query.bindValue(":feat", "{}"); 
+    query.bindValue(":feat", QJsonDocument(cls.extraDataToJson()).toJson(QJsonDocument::Compact));
     
     if (!query.exec()) {
         qDebug() << "Error adding class:" << query.lastError().text();
@@ -255,9 +430,20 @@ bool DatabaseManager::addClass(const Class& cls)
 
 void DatabaseManager::importClassesFromJson(const QString& filePath)
 {
-     QFile file(filePath);
+    QString resolvedPath = filePath;
+    if (!QFile::exists(resolvedPath)) {
+        QDir dir(QCoreApplication::applicationDirPath());
+        if (dir.cdUp() && dir.cdUp() && dir.cdUp()) {
+            QString candidate = dir.filePath(filePath);
+            if (QFile::exists(candidate)) {
+                resolvedPath = candidate;
+            }
+        }
+    }
+
+     QFile file(resolvedPath);
     if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << "Cannot open Classes JSON:" << filePath;
+        qDebug() << "Cannot open Classes JSON:" << resolvedPath;
         return;
     }
     
@@ -270,27 +456,11 @@ void DatabaseManager::importClassesFromJson(const QString& filePath)
     
     QJsonArray arr = doc.array();
     for (const QJsonValue &val : arr) {
-        QJsonObject obj = val.toObject();
-        Class c;
-        c.name = obj["name"].toString();
-        c.description = obj["description"].toString();
-        c.hitDie = obj["hitDie"].toInt();
-        c.primaryAbility = obj["primaryAbility"].toString();
-        
-        QJsonArray saves = obj["savingThrowProficiencies"].toArray();
-        for(const QJsonValue &v : saves) c.savingThrowProficiencies.append(v.toString());
-        
-        QJsonArray armor = obj["armorProficiencies"].toArray();
-        for(const QJsonValue &v : armor) c.armorProficiencies.append(v.toString());
-        
-        QJsonArray wpns = obj["weaponProficiencies"].toArray();
-        for(const QJsonValue &v : wpns) c.weaponProficiencies.append(v.toString());
-        
-        addClass(c);
+        addClass(Class::fromJson(val.toObject()));
     }
     
     QSqlDatabase::database().commit();
-    qDebug() << "Classes imported.";
+    qDebug() << "Classes imported from" << resolvedPath;
 }
 
 QList<Class> DatabaseManager::getAllClasses()
@@ -299,7 +469,9 @@ QList<Class> DatabaseManager::getAllClasses()
     QSqlQuery query("SELECT * FROM classes");
     while (query.next()) {
         Class c;
+        c.slug = query.value("slug").toString();
         c.name = query.value("name").toString();
+        c.source = query.value("source").toString();
         c.description = query.value("description").toString();
         c.hitDie = query.value("hit_die").toInt();
         c.primaryAbility = query.value("primary_ability").toString();
@@ -312,10 +484,314 @@ QList<Class> DatabaseManager::getAllClasses()
         
         QJsonArray wpns = QJsonDocument::fromJson(query.value("weapon_prof").toString().toUtf8()).array();
         for(const QJsonValue &v : wpns) c.weaponProficiencies.append(v.toString());
+
+        const QJsonObject extra = QJsonDocument::fromJson(query.value("features").toString().toUtf8()).object();
+        c.loadExtraData(extra);
         
         list.append(c);
     }
     return list;
+}
+
+bool DatabaseManager::addBackground(const Background& background)
+{
+    QSqlQuery query;
+    query.prepare(
+        "INSERT INTO backgrounds (slug, name, source, description, skill_prof, tool_prof, languages, equipment, feature_name, feature_description, traits) "
+        "VALUES (:slug, :name, :source, :description, :skill_prof, :tool_prof, :languages, :equipment, :feature_name, :feature_description, :traits)");
+
+    query.bindValue(":slug", background.slug);
+    query.bindValue(":name", background.name);
+    query.bindValue(":source", background.source);
+    query.bindValue(":description", background.description);
+    query.bindValue(":skill_prof", QJsonDocument(QJsonArray::fromStringList(background.skillProficiencies)).toJson(QJsonDocument::Compact));
+    query.bindValue(":tool_prof", QJsonDocument(QJsonArray::fromStringList(background.toolProficiencies)).toJson(QJsonDocument::Compact));
+    query.bindValue(":languages", QJsonDocument(QJsonArray::fromStringList(background.languages)).toJson(QJsonDocument::Compact));
+    query.bindValue(":equipment", QJsonDocument(QJsonArray::fromStringList(background.equipment)).toJson(QJsonDocument::Compact));
+    query.bindValue(":feature_name", background.featureName);
+    query.bindValue(":feature_description", background.featureDescription);
+
+    QJsonObject traitsObj;
+    for (auto it = background.traits.begin(); it != background.traits.end(); ++it) {
+        traitsObj.insert(it.key(), it.value());
+    }
+    query.bindValue(":traits", QJsonDocument(traitsObj).toJson(QJsonDocument::Compact));
+
+    if (!query.exec()) {
+        qDebug() << "Error adding background:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+QList<Background> DatabaseManager::getAllBackgrounds()
+{
+    QList<Background> list;
+    QSqlQuery query("SELECT * FROM backgrounds ORDER BY name COLLATE NOCASE");
+    while (query.next()) {
+        Background background;
+        background.slug = query.value("slug").toString();
+        background.name = query.value("name").toString();
+        background.source = query.value("source").toString();
+        background.description = query.value("description").toString();
+        background.featureName = query.value("feature_name").toString();
+        background.featureDescription = query.value("feature_description").toString();
+
+        const QJsonArray skillArray = QJsonDocument::fromJson(query.value("skill_prof").toString().toUtf8()).array();
+        for (const QJsonValue &value : skillArray) {
+            background.skillProficiencies << value.toString();
+        }
+
+        const QJsonArray toolArray = QJsonDocument::fromJson(query.value("tool_prof").toString().toUtf8()).array();
+        for (const QJsonValue &value : toolArray) {
+            background.toolProficiencies << value.toString();
+        }
+
+        const QJsonArray languageArray = QJsonDocument::fromJson(query.value("languages").toString().toUtf8()).array();
+        for (const QJsonValue &value : languageArray) {
+            background.languages << value.toString();
+        }
+
+        const QJsonArray equipmentArray = QJsonDocument::fromJson(query.value("equipment").toString().toUtf8()).array();
+        for (const QJsonValue &value : equipmentArray) {
+            background.equipment << value.toString();
+        }
+
+        const QJsonObject traitsObj = QJsonDocument::fromJson(query.value("traits").toString().toUtf8()).object();
+        for (auto it = traitsObj.begin(); it != traitsObj.end(); ++it) {
+            background.traits.insert(it.key(), it.value().toString());
+        }
+
+        list.append(background);
+    }
+
+    return list;
+}
+
+void DatabaseManager::importBackgroundsFromJson(const QString& filePath)
+{
+    QString resolvedPath = filePath;
+    if (!QFile::exists(resolvedPath)) {
+        QDir dir(QCoreApplication::applicationDirPath());
+        if (dir.cdUp() && dir.cdUp() && dir.cdUp()) {
+            const QString candidate = dir.filePath(filePath);
+            if (QFile::exists(candidate)) {
+                resolvedPath = candidate;
+            }
+        }
+    }
+
+    QFile file(resolvedPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "Cannot open Backgrounds JSON:" << resolvedPath;
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (!doc.isArray()) {
+        return;
+    }
+
+    QSqlDatabase::database().transaction();
+    QSqlQuery("DELETE FROM backgrounds").exec();
+
+    const QJsonArray array = doc.array();
+    for (const QJsonValue &value : array) {
+        const QJsonObject obj = value.toObject();
+        Background background;
+        background.slug = obj.value("slug").toString();
+        background.name = obj.value("name").toString();
+        background.source = obj.value("source").toString();
+        background.description = obj.value("description").toString();
+        background.featureName = obj.value("featureName").toString();
+        background.featureDescription = obj.value("featureDescription").toString();
+
+        const QJsonArray skillArray = obj.value("skillProficiencies").toArray();
+        for (const QJsonValue &entry : skillArray) {
+            background.skillProficiencies << entry.toString();
+        }
+
+        const QJsonArray toolArray = obj.value("toolProficiencies").toArray();
+        for (const QJsonValue &entry : toolArray) {
+            background.toolProficiencies << entry.toString();
+        }
+
+        const QJsonArray languageArray = obj.value("languages").toArray();
+        for (const QJsonValue &entry : languageArray) {
+            background.languages << entry.toString();
+        }
+
+        const QJsonArray equipmentArray = obj.value("equipment").toArray();
+        for (const QJsonValue &entry : equipmentArray) {
+            background.equipment << entry.toString();
+        }
+
+        const QJsonObject traitsObj = obj.value("traits").toObject();
+        for (auto it = traitsObj.begin(); it != traitsObj.end(); ++it) {
+            background.traits.insert(it.key(), it.value().toString());
+        }
+
+        addBackground(background);
+    }
+
+    QSqlDatabase::database().commit();
+    qDebug() << "Backgrounds imported from" << resolvedPath;
+}
+
+bool DatabaseManager::addFeat(const Feat& feat)
+{
+    QSqlQuery query;
+    query.prepare(
+        "INSERT INTO feats (slug, name, source, description, prerequisite, benefits) "
+        "VALUES (:slug, :name, :source, :description, :prerequisite, :benefits)");
+
+    query.bindValue(":slug", feat.slug);
+    query.bindValue(":name", feat.name);
+    query.bindValue(":source", feat.source);
+    query.bindValue(":description", feat.description);
+    query.bindValue(":prerequisite", feat.prerequisite);
+    query.bindValue(":benefits", QJsonDocument(QJsonArray::fromStringList(feat.benefits)).toJson(QJsonDocument::Compact));
+
+    if (!query.exec()) {
+        qDebug() << "Error adding feat:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+QList<Feat> DatabaseManager::getAllFeats()
+{
+    QList<Feat> list;
+    QSqlQuery query("SELECT * FROM feats ORDER BY name COLLATE NOCASE");
+    while (query.next()) {
+        Feat feat;
+        feat.slug = query.value("slug").toString();
+        feat.name = query.value("name").toString();
+        feat.source = query.value("source").toString();
+        feat.description = query.value("description").toString();
+        feat.prerequisite = query.value("prerequisite").toString();
+
+        const QJsonArray benefitArray = QJsonDocument::fromJson(query.value("benefits").toString().toUtf8()).array();
+        for (const QJsonValue &entry : benefitArray) {
+            feat.benefits << entry.toString();
+        }
+
+        list.append(feat);
+    }
+
+    return list;
+}
+
+void DatabaseManager::importFeatsFromJson(const QString& filePath)
+{
+    QString resolvedPath = filePath;
+    if (!QFile::exists(resolvedPath)) {
+        QDir dir(QCoreApplication::applicationDirPath());
+        if (dir.cdUp() && dir.cdUp() && dir.cdUp()) {
+            const QString candidate = dir.filePath(filePath);
+            if (QFile::exists(candidate)) {
+                resolvedPath = candidate;
+            }
+        }
+    }
+
+    QFile file(resolvedPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "Cannot open Feats JSON:" << resolvedPath;
+        return;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (!doc.isArray()) {
+        return;
+    }
+
+    QSqlDatabase::database().transaction();
+    QSqlQuery("DELETE FROM feats").exec();
+
+    const QJsonArray array = doc.array();
+    for (const QJsonValue &value : array) {
+        const QJsonObject obj = value.toObject();
+        Feat feat;
+        feat.slug = obj.value("slug").toString();
+        feat.name = obj.value("name").toString();
+        feat.source = obj.value("source").toString();
+        feat.description = obj.value("description").toString();
+        feat.prerequisite = obj.value("prerequisite").toString();
+
+        const QJsonArray benefitArray = obj.value("benefits").toArray();
+        for (const QJsonValue &entry : benefitArray) {
+            feat.benefits << entry.toString();
+        }
+
+        addFeat(feat);
+    }
+
+    QSqlDatabase::database().commit();
+    qDebug() << "Feats imported from" << resolvedPath;
+}
+
+bool DatabaseManager::saveCharacter(const QString& campaignName, const Character& character)
+{
+    const QString trimmedCampaign = campaignName.trimmed();
+    if (trimmedCampaign.isEmpty()) {
+        return false;
+    }
+
+    QSqlQuery query;
+    query.prepare(
+        "INSERT OR REPLACE INTO characters "
+        "(campaign_name, name, level, race, class_summary, data, updated_at) "
+        "VALUES (:campaign_name, :name, :level, :race, :class_summary, :data, CURRENT_TIMESTAMP)");
+    query.bindValue(":campaign_name", trimmedCampaign);
+    query.bindValue(":name", character.name());
+    query.bindValue(":level", character.level);
+    query.bindValue(":race", character.race());
+    query.bindValue(":class_summary", character.characterClass());
+    query.bindValue(":data", QJsonDocument(character.toJson()).toJson(QJsonDocument::Compact));
+
+    if (!query.exec()) {
+        qDebug() << "Error saving character:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::loadCharacter(const QString& campaignName, Character *character)
+{
+    if (!character) {
+        return false;
+    }
+
+    const QString trimmedCampaign = campaignName.trimmed();
+    if (trimmedCampaign.isEmpty()) {
+        return false;
+    }
+
+    QSqlQuery query;
+    query.prepare("SELECT data FROM characters WHERE campaign_name = :campaign_name LIMIT 1");
+    query.bindValue(":campaign_name", trimmedCampaign);
+
+    if (!query.exec()) {
+        qDebug() << "Error loading character:" << query.lastError().text();
+        return false;
+    }
+
+    if (!query.next()) {
+        return false;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(query.value("data").toByteArray());
+    if (!doc.isObject()) {
+        qDebug() << "Stored character payload is invalid for campaign:" << trimmedCampaign;
+        return false;
+    }
+
+    character->fromJson(doc.object());
+    return true;
 }
 
 void DatabaseManager::importBestiaryFromJson(const QString& filePath)
@@ -448,11 +924,11 @@ bool DatabaseManager::connectToDatabase()
     // Структура: build/Kit/Debug/app.exe -> ../../../dnd_rules.db
     QDir dir(QCoreApplication::applicationDirPath());
     if (dir.cdUp() && dir.cdUp() && dir.cdUp()) {
-         QString devDbPath = dir.filePath(dbName);
-         if (QFile::exists(devDbPath)) {
-             dbPath = devDbPath;
-             qDebug() << "Debug Mode: Using database from source root:" << dbPath;
-         }
+        QString devDbPath = dir.filePath(dbName);
+        if (QFile::exists(devDbPath)) {
+            dbPath = devDbPath;
+            qDebug() << "Debug Mode: Using database from source root:" << dbPath;
+        }
     }
 #endif
     
@@ -483,6 +959,17 @@ bool DatabaseManager::connectToDatabase()
 bool DatabaseManager::initTables()
 {
     QSqlQuery query;
+
+    auto hasColumn = [&](const QString &tableName, const QString &columnName) {
+        QSqlQuery infoQuery;
+        infoQuery.exec(QString("PRAGMA table_info(%1)").arg(tableName));
+        while (infoQuery.next()) {
+            if (infoQuery.value(1).toString() == columnName) {
+                return true;
+            }
+        }
+        return false;
+    };
     
     // Таблица Заклинаний
     // Обновленная структура: добавлены ritual, classes
@@ -557,13 +1044,23 @@ bool DatabaseManager::initTables()
         return false;
     }
 
+    if (hasColumn("races", "name") && !hasColumn("races", "slug")) {
+        if (!query.exec("DROP TABLE IF EXISTS races")) {
+            qDebug() << "Could not recreate races table:" << query.lastError();
+            return false;
+        }
+    }
+
     // Таблица Рас
     QString createRacesTable = R"(
         CREATE TABLE IF NOT EXISTS races (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE,
+            slug TEXT UNIQUE,
+            name TEXT,
+            source TEXT,
             description TEXT,
             speed INTEGER,
+            flying_speed INTEGER DEFAULT 0,
             size TEXT,
             asi_str INTEGER DEFAULT 0,
             asi_dex INTEGER DEFAULT 0,
@@ -581,11 +1078,20 @@ bool DatabaseManager::initTables()
         return false;
     }
 
+    if (hasColumn("classes", "name") && !hasColumn("classes", "slug")) {
+        if (!query.exec("DROP TABLE IF EXISTS classes")) {
+            qDebug() << "Could not recreate classes table:" << query.lastError();
+            return false;
+        }
+    }
+
     // Таблица Классов
     QString createClassesTable = R"(
         CREATE TABLE IF NOT EXISTS classes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE,
+            slug TEXT UNIQUE,
+            name TEXT,
+            source TEXT,
             description TEXT,
             hit_die INTEGER,
             primary_ability TEXT,
@@ -598,6 +1104,62 @@ bool DatabaseManager::initTables()
 
     if (!query.exec(createClassesTable)) {
         qDebug() << "Could not create classes table:" << query.lastError();
+        return false;
+    }
+
+    QString createBackgroundsTable = R"(
+        CREATE TABLE IF NOT EXISTS backgrounds (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT UNIQUE,
+            name TEXT,
+            source TEXT,
+            description TEXT,
+            skill_prof TEXT,
+            tool_prof TEXT,
+            languages TEXT,
+            equipment TEXT,
+            feature_name TEXT,
+            feature_description TEXT,
+            traits TEXT
+        )
+    )";
+
+    if (!query.exec(createBackgroundsTable)) {
+        qDebug() << "Could not create backgrounds table:" << query.lastError();
+        return false;
+    }
+
+    QString createFeatsTable = R"(
+        CREATE TABLE IF NOT EXISTS feats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT UNIQUE,
+            name TEXT,
+            source TEXT,
+            description TEXT,
+            prerequisite TEXT,
+            benefits TEXT
+        )
+    )";
+
+    if (!query.exec(createFeatsTable)) {
+        qDebug() << "Could not create feats table:" << query.lastError();
+        return false;
+    }
+
+    QString createCharactersTable = R"(
+        CREATE TABLE IF NOT EXISTS characters (
+            campaign_name TEXT PRIMARY KEY,
+            name TEXT,
+            level INTEGER DEFAULT 1,
+            race TEXT,
+            class_summary TEXT,
+            data TEXT NOT NULL,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    )";
+
+    if (!query.exec(createCharactersTable)) {
+        qDebug() << "Could not create characters table:" << query.lastError();
         return false;
     }
 
@@ -814,8 +1376,7 @@ void DatabaseManager::populateInitialData()
         "scripts/final_item.json",
         "../scripts/final_item.json",
         "../../scripts/final_item.json",
-        "../../../scripts/final_item.json",
-        "D:/repos/qt/DnD_help/scripts/final_item.json"
+        "../../../scripts/final_item.json"
     };
     
     QString jsonPath;
@@ -853,8 +1414,7 @@ void DatabaseManager::populateInitialData()
         "scripts/final_bestiary.json",
         "../scripts/final_bestiary.json",
         "../../scripts/final_bestiary.json",
-        "../../../scripts/final_bestiary.json",
-        "D:/repos/qt/DnD_help/scripts/final_bestiary.json"
+        "../../../scripts/final_bestiary.json"
     };
 
     QString bestiaryJsonPath;

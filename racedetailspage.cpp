@@ -3,6 +3,75 @@
 #include <QDebug>
 #include <QGroupBox>
 #include <QPixmap>
+#include <QRegularExpression>
+
+namespace {
+
+QString displayRaceTraitTitle(const QString &title)
+{
+    QString cleaned = title.trimmed();
+    bool changed = true;
+    while (changed) {
+        changed = false;
+
+        while (cleaned.startsWith(QStringLiteral("!"))) {
+            cleaned.remove(0, 1);
+            cleaned = cleaned.trimmed();
+            changed = true;
+        }
+
+        if (cleaned.startsWith(QStringLiteral("(заклинание)"), Qt::CaseInsensitive)) {
+            cleaned.remove(0, QStringLiteral("(заклинание)").size());
+            cleaned = cleaned.trimmed();
+            changed = true;
+        }
+    }
+    return cleaned;
+}
+
+QString displayRaceTraitDescription(QString description)
+{
+    description = description.trimmed();
+    description.replace(QRegularExpression(QStringLiteral("\\[([^\\]]+)\\]")), QStringLiteral("\\1"));
+    return description;
+}
+
+QString abilityIncreaseSummary(const Race &race)
+{
+    QStringList texts;
+    for (auto it = race.traits.begin(); it != race.traits.end(); ++it) {
+        if (it.key().contains(QStringLiteral("Увеличение характеристик"), Qt::CaseInsensitive)) {
+            const QString text = it.value().simplified();
+            if (!text.isEmpty() && !texts.contains(text)) {
+                texts << text;
+            }
+        }
+    }
+
+    if (!texts.isEmpty()) {
+        return texts.join("\n\n");
+    }
+
+    QStringList statList;
+    for (auto it = race.abilityScoreIncrease.begin(); it != race.abilityScoreIncrease.end(); ++it) {
+        QString statName;
+        if(it.key() == "Strength") statName = "Сила";
+        else if(it.key() == "Dexterity") statName = "Ловкость";
+        else if(it.key() == "Constitution") statName = "Телосложение";
+        else if(it.key() == "Intelligence") statName = "Интеллект";
+        else if(it.key() == "Wisdom") statName = "Мудрость";
+        else if(it.key() == "Charisma") statName = "Харизма";
+        else statName = it.key();
+
+        if (it.value() > 0) {
+            statList.append(QString("%1 +%2").arg(statName).arg(it.value()));
+        }
+    }
+
+    return statList.join(", ");
+}
+
+}
 
 RaceDetailsPage::RaceDetailsPage(QWidget *parent) : QWidget(parent)
 {
@@ -123,21 +192,7 @@ void RaceDetailsPage::setRace(const Race &race)
     }
     
     // Stats
-    QStringList statList;
-    for(auto it = race.abilityScoreIncrease.begin(); it != race.abilityScoreIncrease.end(); ++it) {
-        QString statName;
-        // Translate or use key directly. Assuming keys like "Dexterity", "Wisdom"
-        if(it.key() == "Strength") statName = "Сила";
-        else if(it.key() == "Dexterity") statName = "Ловкость";
-        else if(it.key() == "Constitution") statName = "Телосложение";
-        else if(it.key() == "Intelligence") statName = "Интеллект";
-        else if(it.key() == "Wisdom") statName = "Мудрость";
-        else if(it.key() == "Charisma") statName = "Харизма";
-        else statName = it.key();
-        
-        statList.append(QString("%1 +%2").arg(statName).arg(it.value()));
-    }
-    statsLabel->setText(statList.join(", "));
+    statsLabel->setText(abilityIncreaseSummary(race));
     
     // Physical
     sizeLabel->setText(QString("<b>Размер:</b> %1").arg(race.size));
@@ -155,7 +210,7 @@ void RaceDetailsPage::setRace(const Race &race)
     }
     
     for(auto it = race.traits.begin(); it != race.traits.end(); ++it) {
-        QLabel *traitLbl = new QLabel(QString("<b>%1</b>: %2").arg(it.key(), it.value()));
+        QLabel *traitLbl = new QLabel(QString("<b>%1</b>: %2").arg(displayRaceTraitTitle(it.key()), displayRaceTraitDescription(it.value())));
         traitLbl->setWordWrap(true);
         traitsLayout->addWidget(traitLbl);
     }
