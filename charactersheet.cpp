@@ -4,6 +4,7 @@
 #include "characterprogressionrules.h"
 #include "class.h"
 #include "databasemanager.h"
+#include "item.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -20,7 +21,10 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QDialog>
+#include <QGuiApplication>
 #include <QMessageBox>
+#include <QScreen>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScrollArea>
@@ -78,6 +82,36 @@ QString spellLevelLabel(int level)
 QString joinOrDash(const QStringList &values)
 {
     return values.isEmpty() ? QStringLiteral("—") : values.join(QStringLiteral(", "));
+}
+
+bool isSubclassGrantedSpell(const Spell &spell)
+{
+    return spell.source.startsWith(QStringLiteral("Подкласс:"), Qt::CaseInsensitive);
+}
+
+QString classSectionDetailsText(const ClassSection &section)
+{
+    QStringList lines;
+    if (!section.levelText.trimmed().isEmpty()) {
+        lines << section.levelText.trimmed();
+    }
+    if (section.optional) {
+        lines << QStringLiteral("Опциональное умение");
+    }
+    if (!section.description.trimmed().isEmpty()) {
+        lines << section.description.trimmed();
+    }
+    return lines.join(QStringLiteral("\n\n"));
+}
+
+ClassSubclass subclassByName(const Class &cls, const QString &subclassName)
+{
+    for (const ClassSubclass &subclass : cls.subclasses) {
+        if (normalizedName(subclass.name) == normalizedName(subclassName)) {
+            return subclass;
+        }
+    }
+    return {};
 }
 
 using NamedAbilityEntry = QPair<QString, QString>;
@@ -212,6 +246,11 @@ bool isDisplayableRaceTraitTitle(const QString &title)
         QStringLiteral("размер"),
         QStringLiteral("рост"),
         QStringLiteral("вес"),
+        QStringLiteral("скорость"),
+        QStringLiteral("языки"),
+        QStringLiteral("язык"),
+        QStringLiteral("увеличение характеристик"),
+        QStringLiteral("увеличение характеристики"),
         QStringLiteral("детские имена"),
         QStringLiteral("мужские взрослые имена"),
         QStringLiteral("женские взрослые имена"),
@@ -233,7 +272,11 @@ bool isDisplayableRaceTraitTitle(const QString &title)
         QStringLiteral("имя"),
         QStringLiteral("возраст"),
         QStringLiteral("сезон"),
-        QStringLiteral("дополнительный язык")
+        QStringLiteral("дополнительный язык"),
+        QStringLiteral("скорост"),
+        QStringLiteral("язык"),
+        QStringLiteral("увеличение характеристик"),
+        QStringLiteral("снаряжен")
     };
     for (const QString &blockedPart : blockedTitleParts) {
         if (normalizedTitle.contains(blockedPart)) {
@@ -269,7 +312,7 @@ QMap<QString, QString> normalizedRaceTraits(const QMap<QString, QString> &traits
     return normalized;
 }
 
-QMap<QString, QString> filteredRaceTraits(const QMap<QString, QString> &traits)
+QMap<QString, QString> internalFilteredRaceTraits(const QMap<QString, QString> &traits)
 {
     QMap<QString, QString> filtered;
     for (auto it = traits.begin(); it != traits.end(); ++it) {
@@ -299,7 +342,7 @@ int minimumRequiredLevelFromText(const QString &text)
     bool matched = false;
 
     const QRegularExpression regex(
-        QStringLiteral("(?:начиная\s+с|с)\s*(\\d+)\\s*(?:-|–)?\\s*(?:го|й|ого)?\\s+уров"),
+        QStringLiteral("(?:начиная\\s+с|с)\\s*(\\d+)\\s*(?:-|–)?\\s*(?:го|й|ого)?\\s+уров"),
         QRegularExpression::CaseInsensitiveOption);
     QRegularExpressionMatchIterator iterator = regex.globalMatch(text);
     while (iterator.hasNext()) {
@@ -321,6 +364,29 @@ bool raceTraitAvailableAtLevel(const QString &title, const QString &description,
     return level >= requiredLevel;
 }
 
+bool isDisplayableClassSection(const ClassSection &section)
+{
+    const QString title = normalizedName(section.title);
+    if (title.isEmpty()) {
+        return false;
+    }
+
+    if (title.contains(QStringLiteral("хиты")) && title.contains(QStringLiteral("снаряж"))) {
+        return false;
+    }
+    if (title.contains(QStringLiteral("хиты")) && title.contains(QStringLiteral("владен"))) {
+        return false;
+    }
+    if (title == QStringLiteral("сводка") || title.contains(QStringLiteral("прогрессия"))) {
+        return false;
+    }
+    if (title.contains(QStringLiteral("увеличение характеристик"))) {
+        return false;
+    }
+
+    return true;
+}
+
 bool isPureRaceProficiencyTrait(const QString &title, const QString &description)
 {
     const QString normalizedTitle = normalizedName(title);
@@ -335,7 +401,7 @@ bool isPureRaceProficiencyTrait(const QString &title, const QString &description
 QMap<QString, QString> displayableRaceFeatures(const QMap<QString, QString> &traits, int characterLevel)
 {
     QMap<QString, QString> filtered;
-    const QMap<QString, QString> baseTraits = filteredRaceTraits(traits);
+    const QMap<QString, QString> baseTraits = internalFilteredRaceTraits(traits);
     for (auto it = baseTraits.begin(); it != baseTraits.end(); ++it) {
         if (!raceTraitAvailableAtLevel(it.key(), it.value(), characterLevel)) {
             continue;
@@ -369,6 +435,13 @@ bool spellMatchesExact(const Spell &spell, const QString &className, const QStri
 {
     return spell.level == spellLevel &&
            normalizedName(spell.name) == normalizedName(spellName) &&
+           spellBelongsToClass(spell, className);
+}
+
+bool isSameSpellForClass(const Spell &spell, const QString &className, const Spell &target)
+{
+    return spell.level == target.level &&
+           normalizedName(spell.name) == normalizedName(target.name) &&
            spellBelongsToClass(spell, className);
 }
 
@@ -625,6 +698,11 @@ const QMap<QString, Class> &classDefinitions()
     return definitions;
 }
 
+}
+
+QMap<QString, QString> filteredRaceTraits(const QMap<QString, QString> &traits)
+{
+    return internalFilteredRaceTraits(traits);
 }
 
 CharacterSheet::CharacterSheet(QWidget *parent)
@@ -970,6 +1048,7 @@ void CharacterSheet::setupExtendedSections()
     connect(spellTree, &QTreeWidget::itemChanged, this, &CharacterSheet::onSpellItemChanged);
     connect(spellTree, &QTreeWidget::itemSelectionChanged, this, &CharacterSheet::onSpellSelectionChanged);
     connect(featuresTree, &QTreeWidget::itemSelectionChanged, this, &CharacterSheet::onFeatureSelectionChanged);
+    connect(inventoryList, &QListWidget::itemClicked, this, &CharacterSheet::onInventoryItemClicked);
 
     clearExtendedSections();
 }
@@ -1163,6 +1242,17 @@ void CharacterSheet::updateFromCharacter()
         classTooltipLines << QStringLiteral("Кость хитов: 1d%1").arg(m_character->hitDie);
     }
     classTooltipLines << QStringLiteral("Бонус мастерства: %1").arg(signedValue(m_character->proficiencyBonus));
+    if (!m_character->subclassSelections.isEmpty()) {
+        QStringList subclassLines;
+        for (auto it = m_character->subclassSelections.begin(); it != m_character->subclassSelections.end(); ++it) {
+            if (!it.value().trimmed().isEmpty()) {
+                subclassLines << QStringLiteral("%1: %2").arg(it.key(), it.value());
+            }
+        }
+        if (!subclassLines.isEmpty()) {
+            classTooltipLines << QStringLiteral("Подклассы: %1").arg(subclassLines.join(QStringLiteral("; ")));
+        }
+    }
     if (!m_character->savingThrowProficiencies.isEmpty()) {
         classTooltipLines << QStringLiteral("Спасброски: %1").arg(m_character->savingThrowProficiencies.join(QStringLiteral(", ")));
     }
@@ -1449,7 +1539,7 @@ bool CharacterSheet::setSpellPreparedState(const QString &className, const Spell
     bool alreadyPrepared = false;
     int preparedCount = 0;
     for (const Spell &entry : updatedSpells) {
-        if (spellBelongsToClass(entry, className) && entry.level > 0) {
+        if (spellBelongsToClass(entry, className) && entry.level > 0 && !isSubclassGrantedSpell(entry)) {
             ++preparedCount;
         }
         if (matchesTarget(entry)) {
@@ -1540,7 +1630,14 @@ void CharacterSheet::updateSpellcastingSection()
         const QList<Spell> classKnownSpells = knownSpellsForClass(className);
         int cantripCount = 0;
         int leveledCount = 0;
+        int subclassSpellCount = 0;
         for (const Spell &spell : classKnownSpells) {
+            if (isSubclassGrantedSpell(spell)) {
+                if (spell.level > 0) {
+                    ++subclassSpellCount;
+                }
+                continue;
+            }
             if (spell.level == 0) {
                 ++cantripCount;
             } else {
@@ -1575,6 +1672,9 @@ void CharacterSheet::updateSpellcastingSection()
 
         if (!rule.note.trimmed().isEmpty()) {
             summaryLines << QStringLiteral("  %1").arg(rule.note.trimmed());
+        }
+        if (subclassSpellCount > 0) {
+            summaryLines << QStringLiteral("  Заклинания подкласса: %1, всегда подготовлены и не входят в лимит.").arg(subclassSpellCount);
         }
     }
     spellcastingSummaryLabel->setText(summaryLines.join(QStringLiteral("\n")));
@@ -1761,7 +1861,13 @@ void CharacterSheet::rebuildSpellTree()
         const QList<Spell> classKnownSpells = knownSpellsForClass(className);
 
         for (const Spell &spell : classKnownSpells) {
-            if (spell.level == 0) {
+            if (isSubclassGrantedSpell(spell)) {
+                appendSpellItem(className, spell, QStringLiteral("Подкласс"), true, false);
+            }
+        }
+
+        for (const Spell &spell : classKnownSpells) {
+            if (spell.level == 0 && !isSubclassGrantedSpell(spell)) {
                 appendSpellItem(className, spell, QStringLiteral("Заговор"), true, false);
             }
         }
@@ -1770,7 +1876,7 @@ void CharacterSheet::rebuildSpellTree()
             const QList<Spell> classSpellbook = spellbookForClass(className);
             for (const Spell &spell : classSpellbook) {
                 const bool prepared = std::any_of(classKnownSpells.begin(), classKnownSpells.end(), [&](const Spell &entry) {
-                    return entry.level > 0 && spellMatchesExact(entry, className, spell.name, spell.level);
+                    return entry.level > 0 && !isSubclassGrantedSpell(entry) && spellMatchesExact(entry, className, spell.name, spell.level);
                 });
                 appendSpellItem(className, spell, prepared ? QStringLiteral("Подготовлено") : QStringLiteral("В книге"), prepared, true);
             }
@@ -1780,8 +1886,14 @@ void CharacterSheet::rebuildSpellTree()
         if (rule.mode == QStringLiteral("prepared")) {
             const QList<Spell> availablePreparedSpells = availablePreparedSpellsForClass(className, classLevel, rule.maxSpellLevel);
             for (const Spell &spell : availablePreparedSpells) {
+                const bool grantedBySubclass = std::any_of(classKnownSpells.begin(), classKnownSpells.end(), [&](const Spell &entry) {
+                    return isSubclassGrantedSpell(entry) && isSameSpellForClass(entry, className, spell);
+                });
+                if (grantedBySubclass) {
+                    continue;
+                }
                 const bool prepared = std::any_of(classKnownSpells.begin(), classKnownSpells.end(), [&](const Spell &entry) {
-                    return entry.level > 0 && spellMatchesExact(entry, className, spell.name, spell.level);
+                    return entry.level > 0 && !isSubclassGrantedSpell(entry) && spellMatchesExact(entry, className, spell.name, spell.level);
                 });
                 appendSpellItem(className, spell, prepared ? QStringLiteral("Подготовлено") : QStringLiteral("Не подготовлено"), prepared, true);
             }
@@ -1789,7 +1901,7 @@ void CharacterSheet::rebuildSpellTree()
         }
 
         for (const Spell &spell : classKnownSpells) {
-            if (spell.level > 0) {
+            if (spell.level > 0 && !isSubclassGrantedSpell(spell)) {
                 appendSpellItem(className, spell, QStringLiteral("Известно"), true, false);
             }
         }
@@ -1877,7 +1989,16 @@ void CharacterSheet::updateFeatureSection()
                 ? QStringLiteral("%1 x%2").arg(item.name).arg(item.quantity)
                 : item.name,
             inventoryList);
-        entry->setToolTip(item.description);
+        entry->setData(Qt::UserRole, item.name);
+        entry->setData(Qt::UserRole + 1, item.description);
+        entry->setData(Qt::UserRole + 2, item.type);
+        entry->setData(Qt::UserRole + 3, item.rarity);
+        entry->setData(Qt::UserRole + 4, item.cost);
+        entry->setData(Qt::UserRole + 5, item.weight);
+        entry->setData(Qt::UserRole + 6, item.source);
+        entry->setToolTip(item.description.trimmed().isEmpty()
+            ? QStringLiteral("Нажмите, чтобы открыть описание")
+            : item.description);
     }
     if (inventoryList->count() == 0) {
         inventoryList->addItem(QStringLiteral("Инвентарь пуст."));
@@ -1982,88 +2103,13 @@ void CharacterSheet::rebuildFeatureTree()
             }
 
             const Class cls = classInfo.value(className);
-            const SpellSelectionRule rule = CharacterProgressionRules::instance().spellSelectionRuleForClass(m_character, className, classLevel);
 
             QTreeWidgetItem *classItem = new QTreeWidgetItem(classRoot, {QStringLiteral("Класс"), QStringLiteral("%1 %2").arg(className).arg(classLevel)});
             classItem->setExpanded(true);
 
-            QStringList summaryDetails;
-            summaryDetails << QStringLiteral("Уровень класса: %1").arg(classLevel);
-            if (!cls.description.trimmed().isEmpty()) {
-                summaryDetails << QStringLiteral("\n%1").arg(cls.description);
-            }
-            if (cls.hitDie > 0) {
-                summaryDetails << QStringLiteral("\nКость хитов: 1d%1").arg(cls.hitDie);
-            }
-            if (!cls.primaryAbility.trimmed().isEmpty()) {
-                summaryDetails << QStringLiteral("Основная характеристика: %1").arg(cls.primaryAbility);
-            }
-            if (!cls.savingThrowProficiencies.isEmpty()) {
-                summaryDetails << QStringLiteral("Спасброски: %1").arg(cls.savingThrowProficiencies.join(QStringLiteral(", ")));
-            }
-            if (!cls.armorProficiencies.isEmpty()) {
-                summaryDetails << QStringLiteral("Доспехи: %1").arg(cls.armorProficiencies.join(QStringLiteral(", ")));
-            }
-            if (!cls.weaponProficiencies.isEmpty()) {
-                summaryDetails << QStringLiteral("Оружие: %1").arg(cls.weaponProficiencies.join(QStringLiteral(", ")));
-            }
-            if (!cls.toolProficiencies.isEmpty()) {
-                summaryDetails << QStringLiteral("Инструменты: %1").arg(cls.toolProficiencies.join(QStringLiteral(", ")));
-            }
-            if (cls.skillChoiceCount > 0 && !cls.skillChoices.isEmpty()) {
-                summaryDetails << QStringLiteral("Навыки на выбор: %1 из %2").arg(cls.skillChoiceCount).arg(cls.skillChoices.join(QStringLiteral(", ")));
-            }
-            if (!cls.multiclassRequirement.trimmed().isEmpty()) {
-                summaryDetails << QStringLiteral("Мультиклассирование: %1").arg(cls.multiclassRequirement);
-            }
-            if (!cls.multiclassProficiencies.isEmpty()) {
-                summaryDetails << QStringLiteral("Владения при мультиклассе: %1").arg(cls.multiclassProficiencies.join(QStringLiteral(", ")));
-            }
-            if (!cls.multiclassSpellcastingNote.trimmed().isEmpty()) {
-                summaryDetails << QStringLiteral("Магия при мультиклассе: %1").arg(cls.multiclassSpellcastingNote);
-            }
-            if (rule.isValid()) {
-                summaryDetails << QStringLiteral("Макс. круг заклинаний: %1").arg(rule.maxSpellLevel);
-                if (!rule.note.trimmed().isEmpty()) {
-                    summaryDetails << QStringLiteral("Примечание по магии: %1").arg(rule.note.trimmed());
-                }
-            }
-
-            QTreeWidgetItem *summaryItem = addFeatureItem(classItem, QStringLiteral("Класс"), QStringLiteral("Сводка"), summaryDetails.join(QStringLiteral("\n")));
-            if (!firstLeaf) {
-                firstLeaf = summaryItem;
-            }
-
-            if (!cls.progression.isEmpty()) {
-                QTreeWidgetItem *progressionRoot = new QTreeWidgetItem(classItem, {QStringLiteral("Прогрессия"), QStringLiteral("Что получено по уровням")});
-                progressionRoot->setExpanded(true);
-                for (const ClassLevelProgression &entry : cls.progression) {
-                    if (entry.level <= 0 || entry.level > classLevel) {
-                        continue;
-                    }
-
-                    QStringList entryDetails;
-                    entryDetails << QStringLiteral("Уровень класса: %1").arg(entry.level);
-                    entryDetails << QStringLiteral("Бонус мастерства: %1").arg(signedValue(entry.proficiencyBonus));
-                    if (!entry.features.isEmpty()) {
-                        entryDetails << QStringLiteral("Полученные умения: %1").arg(entry.features.join(QStringLiteral(", ")));
-                    }
-
-                    QTreeWidgetItem *item = addFeatureItem(
-                        progressionRoot,
-                        QStringLiteral("Уровень %1").arg(entry.level),
-                        entry.features.isEmpty() ? QStringLiteral("Новая веха") : entry.features.join(QStringLiteral(", ")),
-                        entryDetails.join(QStringLiteral("\n"))
-                    );
-                    if (!firstLeaf) {
-                        firstLeaf = item;
-                    }
-                }
-            }
-
             QList<ClassSection> availableSections;
             for (const ClassSection &section : cls.featureSections) {
-                if (section.title.trimmed().isEmpty()) {
+                if (!isDisplayableClassSection(section)) {
                     continue;
                 }
                 if (section.levelRequirement > 0 && section.levelRequirement > classLevel) {
@@ -2076,18 +2122,43 @@ void CharacterSheet::rebuildFeatureTree()
                 QTreeWidgetItem *featuresRoot = new QTreeWidgetItem(classItem, {QStringLiteral("Умения"), QStringLiteral("Подробные классовые умения")});
                 featuresRoot->setExpanded(true);
                 for (const ClassSection &section : availableSections) {
-                    QStringList sectionDetails;
-                    if (!section.levelText.trimmed().isEmpty()) {
-                        sectionDetails << section.levelText.trimmed();
-                    }
-                    if (section.optional) {
-                        sectionDetails << QStringLiteral("Опциональное умение");
-                    }
-                    if (!section.description.trimmed().isEmpty()) {
-                        sectionDetails << section.description.trimmed();
+                    QString featureTitle = section.title.trimmed();
+                    const QString choiceKey = QStringLiteral("%1|%2").arg(className, featureTitle);
+                    const QString chosenOption = m_character->classFeatureChoices.value(choiceKey).trimmed();
+                    if (!chosenOption.isEmpty()) {
+                        featureTitle = QStringLiteral("%1: %2").arg(featureTitle, chosenOption);
                     }
 
-                    QTreeWidgetItem *item = addFeatureItem(featuresRoot, QStringLiteral("Умение"), section.title, sectionDetails.join(QStringLiteral("\n\n")));
+                    QString details = classSectionDetailsText(section);
+                    if (!chosenOption.isEmpty()) {
+                        details = QStringLiteral("Выбранный вариант: %1\n\n%2").arg(chosenOption, details);
+                    }
+
+                    QTreeWidgetItem *item = addFeatureItem(featuresRoot, QStringLiteral("Умение"), featureTitle, details);
+                    if (!firstLeaf) {
+                        firstLeaf = item;
+                    }
+                }
+            }
+
+            const QString subclassName = m_character->subclassSelections.value(className).trimmed();
+            const ClassSubclass subclass = subclassByName(cls, subclassName);
+            if (!subclass.name.trimmed().isEmpty()) {
+                QTreeWidgetItem *subclassRoot = new QTreeWidgetItem(classItem, {QStringLiteral("Подкласс"), subclass.name});
+                subclassRoot->setExpanded(true);
+                for (const ClassSection &section : subclass.sections) {
+                    if (section.title.trimmed().isEmpty()) {
+                        continue;
+                    }
+                    if (section.levelRequirement > 0 && section.levelRequirement > classLevel) {
+                        continue;
+                    }
+
+                    QTreeWidgetItem *item = addFeatureItem(
+                        subclassRoot,
+                        QStringLiteral("Подкласс"),
+                        section.title,
+                        classSectionDetailsText(section));
                     if (!firstLeaf) {
                         firstLeaf = item;
                     }
@@ -2105,6 +2176,89 @@ void CharacterSheet::rebuildFeatureTree()
     featuresTree->expandAll();
     featuresTree->setCurrentItem(firstLeaf);
     updateFeatureDetails(firstLeaf);
+}
+
+void CharacterSheet::onInventoryItemClicked(QListWidgetItem *item)
+{
+    if (!item || !inventoryList) {
+        return;
+    }
+
+    const QString itemName = item->data(Qt::UserRole).toString().trimmed();
+    if (itemName.isEmpty()) {
+        return;
+    }
+
+    QString description = item->data(Qt::UserRole + 1).toString().trimmed();
+    if (description.isEmpty()) {
+        for (const Item &dbItem : DatabaseManager::instance().getAllItems()) {
+            if (dbItem.name.compare(itemName, Qt::CaseInsensitive) == 0) {
+                description = dbItem.description.trimmed();
+                break;
+            }
+        }
+    }
+
+    QStringList metaLines;
+    const auto appendMeta = [&](const QString &label, const QString &value) {
+        if (!value.trimmed().isEmpty()) {
+            metaLines << QStringLiteral("%1: %2").arg(label, value.trimmed());
+        }
+    };
+    appendMeta(QStringLiteral("Тип"), item->data(Qt::UserRole + 2).toString());
+    appendMeta(QStringLiteral("Редкость"), item->data(Qt::UserRole + 3).toString());
+    appendMeta(QStringLiteral("Цена"), item->data(Qt::UserRole + 4).toString());
+    appendMeta(QStringLiteral("Вес"), item->data(Qt::UserRole + 5).toString());
+    appendMeta(QStringLiteral("Источник"), item->data(Qt::UserRole + 6).toString());
+
+    QString body = description;
+    if (!metaLines.isEmpty()) {
+        const QString metaBlock = metaLines.join(QStringLiteral("\n"));
+        body = body.isEmpty() ? metaBlock : metaBlock + QStringLiteral("\n\n") + body;
+    }
+    if (body.isEmpty()) {
+        body = QStringLiteral("Описание для этого предмета пока не загружено.");
+    }
+
+    const QPoint anchor = inventoryList->viewport()->mapToGlobal(
+        inventoryList->visualItemRect(item).bottomLeft());
+    showInventoryItemPopup(itemName, body, anchor);
+}
+
+void CharacterSheet::showInventoryItemPopup(const QString &title, const QString &description, const QPoint &globalPos)
+{
+    QDialog *popup = new QDialog(this, Qt::Popup | Qt::FramelessWindowHint);
+    popup->setAttribute(Qt::WA_DeleteOnClose);
+    popup->setMinimumWidth(420);
+    popup->setMaximumWidth(560);
+
+    QVBoxLayout *layout = new QVBoxLayout(popup);
+    layout->setContentsMargins(12, 12, 12, 12);
+
+    QLabel *titleLabel = new QLabel(QStringLiteral("<b>%1</b>").arg(title.toHtmlEscaped()), popup);
+    titleLabel->setWordWrap(true);
+    layout->addWidget(titleLabel);
+
+    QTextEdit *body = new QTextEdit(popup);
+    body->setReadOnly(true);
+    body->setPlainText(description.trimmed());
+    body->setMinimumHeight(160);
+    body->setMaximumHeight(360);
+    layout->addWidget(body);
+
+    QPoint position = globalPos + QPoint(8, 8);
+    if (QScreen *screen = QGuiApplication::screenAt(position)) {
+        const QRect available = screen->availableGeometry();
+        popup->adjustSize();
+        if (position.x() + popup->width() > available.right()) {
+            position.setX(available.right() - popup->width() - 8);
+        }
+        if (position.y() + popup->height() > available.bottom()) {
+            position.setY(globalPos.y() - popup->height() - 8);
+        }
+    }
+    popup->move(position);
+    popup->show();
 }
 
 void CharacterSheet::updateFeatureDetails(QTreeWidgetItem *item)

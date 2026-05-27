@@ -139,14 +139,6 @@ RaceDetailsPage::RaceDetailsPage(QWidget *parent) : QWidget(parent)
     langLayout->addWidget(languagesLabel);
     contentLayout->addWidget(langGroup);
 
-    // Subraces
-    QGroupBox *subracesGroup = new QGroupBox("Подрасы", this);
-    QVBoxLayout *subracesLayout = new QVBoxLayout(subracesGroup);
-    subracesLabel = new QLabel(this);
-    subracesLabel->setWordWrap(true);
-    subracesLayout->addWidget(subracesLabel);
-    contentLayout->addWidget(subracesGroup);
-    
     contentLayout->addStretch();
     
     scrollArea->setWidget(contentWidget);
@@ -217,12 +209,6 @@ void RaceDetailsPage::setRace(const Race &race)
     
     // Languages
     languagesLabel->setText(race.languages.join(", "));
-
-    if (race.subraces.isEmpty()) {
-        subracesLabel->setText("Нет явных подрас в загруженных данных.");
-    } else {
-        subracesLabel->setText(race.subraces.join(", "));
-    }
 }
 
 Race RaceDetailsPage::currentRace() const

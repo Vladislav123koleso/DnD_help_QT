@@ -25,6 +25,8 @@ ClassCard::ClassCard(const QString &className, const QString &imgNormal, const Q
 
     // Initial Setup
     ui->nameLabel->setText(className);
+    ui->nameLabel->setStyleSheet(QStringLiteral(
+        "color: #f5f5f5; padding-top: 6px; background: transparent; font-weight: 700;"));
     ui->descOverlay->setText(desc);
     
     // Explicitly hide overlay initially

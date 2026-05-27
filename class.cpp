@@ -211,6 +211,7 @@ QJsonObject Class::extraDataToJson() const
 	object.insert("progression", progressionListToJson(progression));
 	object.insert("featureSections", sectionListToJson(featureSections));
 	object.insert("subclasses", subclassListToJson(subclasses));
+	object.insert("selectedSubclassName", selectedSubclassName.trimmed());
 	return object;
 }
 
@@ -226,4 +227,5 @@ void Class::loadExtraData(const QJsonObject &object)
 	progression = jsonToProgressionList(object.value("progression"));
 	featureSections = jsonToSectionList(object.value("featureSections"));
 	subclasses = jsonToSubclassList(object.value("subclasses"));
+	selectedSubclassName = object.value("selectedSubclassName").toString().trimmed();
 }

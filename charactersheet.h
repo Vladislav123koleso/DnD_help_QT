@@ -10,6 +10,7 @@ class QComboBox;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QListWidgetItem;
 class QTabWidget;
 class QTextEdit;
 class QTreeWidget;
@@ -41,6 +42,7 @@ private slots:
     void onSpellItemChanged(QTreeWidgetItem *item, int column);
     void onSpellSelectionChanged();
     void onFeatureSelectionChanged();
+    void onInventoryItemClicked(QListWidgetItem *item);
 
 private:
     Ui::CharacterSheet *ui;
@@ -101,6 +103,9 @@ private:
     int preparedSpellLimitForClass(const QString &className) const;
     void updateSpellDetails(QTreeWidgetItem *item);
     void updateFeatureDetails(QTreeWidgetItem *item);
+    void showInventoryItemPopup(const QString &title, const QString &description, const QPoint &globalPos);
 };
+
+QMap<QString, QString> filteredRaceTraits(const QMap<QString, QString> &traits);
 
 #endif // CHARACTERSHEET_H

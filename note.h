@@ -3,12 +3,17 @@
 
 #include <QString>
 #include <QDateTime>
+#include <QTextDocument>
 
 class Note {
 public:
     Note();
+    Note(const QString &titleValue, const QString &htmlContent = "");
+    
+    QString id;
     QString title;
-    QString content;
+    QString htmlContent;  // Хранит HTML форматированный текст
+    QString plainText;    // Простой текст для поиска
     QDateTime created;
     QDateTime modified;
 };

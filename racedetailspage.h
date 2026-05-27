@@ -29,8 +29,7 @@ private:
    QLabel *speedLabel;
    QLabel *sizeLabel;
    QLabel *languagesLabel;
-    QLabel *subracesLabel;
-   
+
    QVBoxLayout *traitsLayout; 
    QWidget *traitsContainer;
 

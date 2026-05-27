@@ -1,4 +1,5 @@
 #include "class_selection_page.h"
+#include <algorithm>
 #include <QVBoxLayout>
 #include <QScrollArea>
 #include <QDebug>
@@ -126,34 +127,11 @@ void ClassSelectionPage::setupUi() {
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
     
-    QWidget *scrollContent = new QWidget();
-    FlowLayout *contentLayout = new FlowLayout(scrollContent, 20, 20, 20);
+    listScrollContent = new QWidget();
+    listContentLayout = new FlowLayout(listScrollContent, 20, 20, 20);
+    rebuildClassList();
 
-    const QStringList classNames = classData.keys();
-    if (classNames.isEmpty()) {
-        QLabel *emptyLabel = new QLabel("Список классов не загружен.", scrollContent);
-        emptyLabel->setAlignment(Qt::AlignCenter);
-        contentLayout->addWidget(emptyLabel);
-    } else {
-        for (const QString &className : classNames) {
-            const Class cls = classData.value(className);
-
-            QString hoverImagePath = cls.imagePath;
-            if (!cls.imagePath.isEmpty()) {
-                const QFileInfo info(cls.imagePath);
-                const QString hoverCandidate = info.path() + "/" + info.completeBaseName() + "_hover." + info.suffix();
-                if (QFile::exists(hoverCandidate)) {
-                    hoverImagePath = hoverCandidate;
-                }
-            }
-
-            ClassCard *card = new ClassCard(className, cls.imagePath, hoverImagePath, shortDescription(cls), scrollContent);
-            connect(card, &ClassCard::classSelected, this, &ClassSelectionPage::onClassSelected);
-            contentLayout->addWidget(card);
-        }
-    }
-
-    scrollArea->setWidget(scrollContent);
+    scrollArea->setWidget(listScrollContent);
     listLayout->addWidget(scrollArea);
     
     // Page 2: Details
@@ -177,8 +155,67 @@ void ClassSelectionPage::onClassSelected(const QString &className)
     }
 }
 
+void ClassSelectionPage::setExcludedClassNames(const QStringList &classNames)
+{
+    excludedClassNames = classNames;
+}
+
+void ClassSelectionPage::clearClassFilters()
+{
+    excludedClassNames.clear();
+}
+
+void ClassSelectionPage::rebuildClassList()
+{
+    if (!listScrollContent || !listContentLayout) {
+        return;
+    }
+
+    while (QLayoutItem *item = listContentLayout->takeAt(0)) {
+        if (QWidget *widget = item->widget()) {
+            widget->deleteLater();
+        }
+        delete item;
+    }
+
+    QStringList classNames = classData.keys();
+    std::sort(classNames.begin(), classNames.end());
+
+    int visibleCount = 0;
+    for (const QString &className : classNames) {
+        if (excludedClassNames.contains(className)) {
+            continue;
+        }
+
+        const Class cls = classData.value(className);
+        QString hoverImagePath = cls.imagePath;
+        if (!cls.imagePath.isEmpty()) {
+            const QFileInfo info(cls.imagePath);
+            const QString hoverCandidate = info.path() + "/" + info.completeBaseName() + "_hover." + info.suffix();
+            if (QFile::exists(hoverCandidate)) {
+                hoverImagePath = hoverCandidate;
+            }
+        }
+
+        ClassCard *card = new ClassCard(className, cls.imagePath, hoverImagePath, shortDescription(cls), listScrollContent);
+        connect(card, &ClassCard::classSelected, this, &ClassSelectionPage::onClassSelected);
+        listContentLayout->addWidget(card);
+        ++visibleCount;
+    }
+
+    if (visibleCount == 0) {
+        const QString emptyText = excludedClassNames.isEmpty()
+            ? QStringLiteral("Список классов не загружен.")
+            : QStringLiteral("Нет доступных классов для мультикласса.");
+        QLabel *emptyLabel = new QLabel(emptyText, listScrollContent);
+        emptyLabel->setAlignment(Qt::AlignCenter);
+        listContentLayout->addWidget(emptyLabel);
+    }
+}
+
 void ClassSelectionPage::showList()
 {
+    rebuildClassList();
     stackedWidget->setCurrentWidget(listPage);
 }
 

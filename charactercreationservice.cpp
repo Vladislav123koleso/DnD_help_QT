@@ -1,30 +1,26 @@
-#include "playerpage.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QPushButton>
-#include <QToolButton>
-#include <QMenu>
-#include <QInputDialog>
-#include <QMessageBox>
-#include <QDialog>
-#include <QDialogButtonBox>
-#include <QComboBox>
-#include <QListWidget>
-#include <QRandomGenerator>
-#include <QDebug>
-#include <QRegularExpression>
-#include <QLineEdit>
-#include <QSplitter>
-#include <QTextEdit>
-#include <algorithm>
-#include "character.h"
-#include "characterprogressionrules.h"
+#include "charactercreationservice.h"
+
 #include "background.h"
+#include "characterprogressionrules.h"
+#include "charactersheet.h"
 #include "databasemanager.h"
 #include "feat.h"
-#include "spellbookwidget.h"
-#include "itembookwidget.h"
+#include "race_selection_page.h"
+#include "class_selection_page.h"
+
+#include <QComboBox>
+#include <QDialog>
+#include <QInputDialog>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QRandomGenerator>
+#include <QRegularExpression>
+#include <QSplitter>
+#include <QTextEdit>
+#include <QVBoxLayout>
+#include <algorithm>
 
 namespace {
 
@@ -343,10 +339,6 @@ private:
     QListWidget *m_listWidget = nullptr;
     QTextEdit *m_detailsView = nullptr;
 };
-
-// Forward declarations
-const QStringList &knownSkillNames();
-bool raceTraitAvailableAtLevel(const QString &title, const QString &description, int level);
 
 QStringList uniqueStrings(QStringList values)
 {
@@ -2138,606 +2130,6 @@ QString spellDetailsText(const Spell &spell)
     return lines.join("\n");
 }
 
-}
-
-PlayerPage::PlayerPage(QWidget *parent)
-    : QWidget(parent),
-      currentCharacter(nullptr),
-      targetCharacterLevel(1),
-      allocatedClassLevels(0)
-{
-    setupUi();
-    connect(characterSheet, &CharacterSheet::characterUpdated, this, &PlayerPage::saveCurrentCharacter);
-}
-
-void PlayerPage::setCampaign(const QString &campaignName)
-{
-    currentCampaign = campaignName.trimmed();
-    const QString notesScope = QStringLiteral("player_%1")
-                                   .arg(currentCampaign.isEmpty() ? QStringLiteral("default") : currentCampaign);
-    notesWidget->setStorageScope(notesScope);
-    loadCharacterForCurrentCampaign();
-}
-
-void PlayerPage::setupUi()
-{
-    QVBoxLayout *layout = new QVBoxLayout(this);
-
-    tabWidget = new QTabWidget(this);
-
-    // Hamburger Menu Button (Corner Widget)
-    QToolButton *menuBtn = new QToolButton(this);
-    menuBtn->setText("☰");
-    menuBtn->setAutoRaise(true);
-    menuBtn->setPopupMode(QToolButton::InstantPopup);
-    menuBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    QFont btnFont = menuBtn->font();
-    btnFont.setPointSize(12);
-    menuBtn->setFont(btnFont);
-
-    QMenu *menu = new QMenu(this);
-    QAction *saveCharacterAction = menu->addAction("Сохранить персонажа");
-    QAction *reloadCharacterAction = menu->addAction("Перезагрузить персонажа");
-    menu->addSeparator();
-    QAction *mainMenuAction = menu->addAction("Main Menu");
-
-    menuBtn->setMenu(menu);
-    connect(saveCharacterAction, &QAction::triggered, this, &PlayerPage::saveCurrentCharacter);
-    connect(reloadCharacterAction, &QAction::triggered, this, &PlayerPage::loadCharacterForCurrentCampaign);
-    connect(mainMenuAction, &QAction::triggered, this, &PlayerPage::mainMenuRequested);
-
-    tabWidget->setCornerWidget(menuBtn, Qt::TopRightCorner);
-
-    // 1. Notes Tab (Заметки)
-    notesWidget = new NotesWidget(this);
-
-    // 2. Character Tab (Персонаж)
-    QWidget *charTab = new QWidget();
-    QVBoxLayout *charLayout = new QVBoxLayout(charTab);
-    
-    charStack = new QStackedWidget(charTab);
-    
-    // --- Page 0: Character Info (Existing) ---
-    QWidget *charInfoPage = new QWidget();
-    QVBoxLayout *infoLayout = new QVBoxLayout(charInfoPage);
-    
-    // Top controls for character tab
-    QHBoxLayout *charControlsLayout = new QHBoxLayout();
-    QPushButton *createCharBtn = new QPushButton("Создать нового персонажа");
-    QPushButton *levelUpBtn = new QPushButton("Повысить уровень");
-    connect(createCharBtn, &QPushButton::clicked, this, &PlayerPage::startCharacterCreation);
-    connect(levelUpBtn, &QPushButton::clicked, this, &PlayerPage::levelUpCharacter);
-    
-    charControlsLayout->addWidget(new QLabel("Информация о персонаже"));
-    charControlsLayout->addStretch();
-    charControlsLayout->addWidget(levelUpBtn);
-    charControlsLayout->addWidget(createCharBtn);
-    
-    infoLayout->addLayout(charControlsLayout);
-    
-    // Character Sheet Widget
-    characterSheet = new CharacterSheet(charInfoPage);
-    infoLayout->addWidget(characterSheet);
-
-    QPushButton *exportPdfBtn = new QPushButton("Скачать в PDF");
-    infoLayout->addWidget(exportPdfBtn);
-    infoLayout->addStretch();
-    
-    charStack->addWidget(charInfoPage);
-    
-    // --- Page 1: Character Creation (Race Selection) ---
-    QWidget *creationPage = new QWidget();
-    QVBoxLayout *creationLayout = new QVBoxLayout(creationPage);
-    
-    QHBoxLayout *creationHeader = new QHBoxLayout();
-    QPushButton *backBtn = new QPushButton("Назад");
-    connect(backBtn, &QPushButton::clicked, this, [this]() {
-        cancelPendingLevelUp(true);
-        showCharacterInfo();
-    });
-    
-    QLabel *stepLabel = new QLabel("Шаг 1: Выбор расы");
-    stepLabel->setStyleSheet("font-size: 16px; font-weight: bold;");
-    
-    creationHeader->addWidget(backBtn);
-    creationHeader->addStretch();
-    creationHeader->addWidget(stepLabel);
-    creationHeader->addStretch();
-    
-    creationLayout->addLayout(creationHeader);
-    
-    // Race Selection Widget
-    racePage = new RaceSelectionPage(creationPage);
-    connect(racePage, &RaceSelectionPage::raceChosen, this, &PlayerPage::onRaceChosen);
-    creationLayout->addWidget(racePage);
-    
-    charStack->addWidget(creationPage);
-    
-    // --- Page 2: Character Creation (Class Selection) ---
-    QWidget *classPageContainer = new QWidget();
-    QVBoxLayout *classLayout = new QVBoxLayout(classPageContainer);
-    
-    QHBoxLayout *classHeader = new QHBoxLayout();
-    QPushButton *classBackBtn = new QPushButton("Назад");
-    
-    // Back from Class selection goes to Race selection (Index 1)
-    connect(classBackBtn, &QPushButton::clicked, this, [this]() {
-        if (levelUpInProgress) {
-            cancelPendingLevelUp(true);
-            showCharacterInfo();
-            return;
-        }
-        charStack->setCurrentIndex(1);
-    });
-    
-    QLabel *classStepLabel = new QLabel("Шаг 2: Выбор класса");
-    classStepLabel->setStyleSheet("font-size: 16px; font-weight: bold;");
-    
-    classHeader->addWidget(classBackBtn);
-    classHeader->addStretch();
-    classHeader->addWidget(classStepLabel);
-    classHeader->addStretch();
-    
-    classLayout->addLayout(classHeader);
-    
-    classPage = new ClassSelectionPage(classPageContainer);
-    connect(classPage, &ClassSelectionPage::classChosen, this, &PlayerPage::onClassChosen);
-    
-    classLayout->addWidget(classPage);
-    charStack->addWidget(classPageContainer);
-
-    charLayout->addWidget(charStack);
-
-    // 3. Spells Tab (Список Заклинаний)
-    QWidget *spellsTab = new QWidget();
-    QVBoxLayout *spellsLayout = new QVBoxLayout(spellsTab);
-    spellsLayout->addWidget(new SpellBookWidget(this));
-
-    // 4. Items Tab (Список Предметов)
-    QWidget *itemsTab = new QWidget();
-    QVBoxLayout *itemsLayout = new QVBoxLayout(itemsTab);
-    itemsLayout->addWidget(new ItemBookWidget(ItemBookWidget::GeneralItems, this));
-
-    // 5. Weapons and Armor Tab (Список Оружия и доспехов)
-    QWidget *equipmentTab = new QWidget();
-    QVBoxLayout *equipmentLayout = new QVBoxLayout(equipmentTab);
-    equipmentLayout->addWidget(new ItemBookWidget(ItemBookWidget::WeaponsAndArmor, this));
-
-    // Add tabs in order
-    tabWidget->addTab(notesWidget, "Заметки");
-    tabWidget->addTab(charTab, "Персонаж");
-    tabWidget->addTab(spellsTab, "Список Заклинаний");
-    tabWidget->addTab(itemsTab, "Список Предметов");
-    tabWidget->addTab(equipmentTab, "Список Оружия и доспехов");
-
-    layout->addWidget(tabWidget);
-}
-
-void PlayerPage::startCharacterCreation()
-{
-    if (currentCharacter && !currentCharacter->name().trimmed().isEmpty()) {
-        const auto answer = QMessageBox::question(
-            this,
-            "Перезаписать персонажа",
-            QString("В кампании \"%1\" уже есть персонаж. Создать нового и заменить текущего?")
-                .arg(currentCampaign.isEmpty() ? "без названия" : currentCampaign));
-
-        if (answer != QMessageBox::Yes) {
-            return;
-        }
-    }
-
-    bool ok = false;
-    int chosenLevel = QInputDialog::getInt(
-        this,
-        "Уровень персонажа",
-        "Выберите итоговый уровень персонажа (1-20):",
-        1,
-        1,
-        20,
-        1,
-        &ok);
-
-    if (!ok) {
-        return;
-    }
-
-    QString chosenName = QInputDialog::getText(
-        this,
-        "Имя персонажа",
-        "Введите имя персонажа:",
-        QLineEdit::Normal,
-        currentCharacter ? currentCharacter->name() : QString(),
-        &ok).trimmed();
-
-    if (!ok) {
-        return;
-    }
-
-    if (chosenName.isEmpty()) {
-        QMessageBox::warning(this, "Имя персонажа", "Имя персонажа не должно быть пустым.");
-        return;
-    }
-
-    if (!chooseBaseAbilityScores()) {
-        return;
-    }
-
-    cancelPendingLevelUp();
-    targetCharacterLevel = chosenLevel;
-
-    if (currentCharacter) {
-        characterSheet->setCharacter(nullptr);
-        delete currentCharacter;
-        currentCharacter = nullptr;
-    }
-
-    currentCharacter = new Character(this);
-    currentCharacter->setName(chosenName);
-    currentCharacter->level = targetCharacterLevel;
-    resetClassSelection();
-    applyBaseAbilityScores();
-    currentCharacter->recalculateDerivedStats(false);
-
-    characterSheet->setCharacter(currentCharacter);
-    charStack->setCurrentIndex(1);
-    racePage->showList();
-}
-
-
-void PlayerPage::showCharacterInfo()
-{
-    charStack->setCurrentIndex(0);
-    characterSheet->setCharacter(currentCharacter);
-}
-
-void PlayerPage::resetCreationProgress()
-{
-    cancelPendingLevelUp();
-    baseAbilityScores.clear();
-    resetClassSelection();
-}
-
-void PlayerPage::cancelPendingLevelUp(bool restoreCharacter)
-{
-    if (restoreCharacter && levelUpInProgress && currentCharacter && !levelUpSnapshot.isEmpty()) {
-        currentCharacter->fromJson(levelUpSnapshot);
-        characterSheet->setCharacter(currentCharacter);
-    }
-
-    levelUpInProgress = false;
-    levelUpChoosingMulticlass = false;
-    levelUpPreviousMaxHp = 0;
-    levelUpPreviousFeatSlots = 0;
-    levelUpSnapshot = QJsonObject();
-    if (classPage) {
-        classPage->clearClassFilters();
-    }
-    if (currentCharacter) {
-        targetCharacterLevel = currentCharacter->level;
-    }
-}
-
-void PlayerPage::resetClassSelection()
-{
-    allocatedClassLevels = 0;
-    selectedClassLevels.clear();
-    selectedClasses.clear();
-    selectedSubclassNames.clear();
-    selectedClassSkillSelections.clear();
-    selectedClassFeatureChoices.clear();
-    classSelectionOrder.clear();
-
-    if (currentCharacter) {
-        currentCharacter->setCharacterClass("");
-        currentCharacter->classLevels.clear();
-        currentCharacter->classHitDice.clear();
-        currentCharacter->subclassSelections.clear();
-        currentCharacter->classSkillSelections.clear();
-        currentCharacter->classFeatureChoices.clear();
-        currentCharacter->classOrder.clear();
-        currentCharacter->savingThrowProficiencies.clear();
-        currentCharacter->armorProficiencies.clear();
-        currentCharacter->weaponProficiencies.clear();
-        currentCharacter->hitDie = 0;
-        currentCharacter->maxHp = 0;
-        currentCharacter->currentHp = 0;
-        currentCharacter->tempHp = 0;
-        currentCharacter->spells.clear();
-        currentCharacter->spellbook.clear();
-    }
-}
-
-int PlayerPage::remainingLevelsToAllocate() const
-{
-    return qMax(0, targetCharacterLevel - allocatedClassLevels);
-}
-
-void PlayerPage::updateCharacterClassSummary()
-{
-    if (!currentCharacter) {
-        return;
-    }
-
-    QStringList parts;
-    for (const QString &className : classSelectionOrder) {
-        const int classLevel = selectedClassLevels.value(className, 0);
-        if (classLevel > 0) {
-            const QString subclassName = selectedSubclassNames.value(className).trimmed();
-            parts << (subclassName.isEmpty()
-                ? QString("%1 %2").arg(className).arg(classLevel)
-                : QString("%1 %2 (%3)").arg(className).arg(classLevel).arg(subclassName));
-        }
-    }
-
-    currentCharacter->setCharacterClass(parts.join(" / "));
-}
-
-void PlayerPage::prepareSelectedClassesFromCharacter()
-{
-    selectedClassLevels = currentCharacter ? currentCharacter->classLevels : QMap<QString, int>();
-    classSelectionOrder = currentCharacter ? currentCharacter->classOrder : QStringList();
-    selectedSubclassNames = currentCharacter ? currentCharacter->subclassSelections : QMap<QString, QString>();
-    selectedClassSkillSelections = currentCharacter ? currentCharacter->classSkillSelections : QMap<QString, QStringList>();
-    selectedClassFeatureChoices = currentCharacter ? currentCharacter->classFeatureChoices : QMap<QString, QString>();
-
-    if (classSelectionOrder.isEmpty()) {
-        classSelectionOrder = selectedClassLevels.keys();
-    }
-
-    selectedClasses.clear();
-    for (const QString &className : classSelectionOrder) {
-        if (className.trimmed().isEmpty()) {
-            continue;
-        }
-        Class cls = classPage->getClassData(className);
-        const QString subclassName = selectedSubclassNames.value(className).trimmed();
-        if (subclassNameExists(cls, subclassName)) {
-            cls.selectedSubclassName = subclassName;
-        }
-        selectedClasses.insert(className, cls);
-    }
-
-    allocatedClassLevels = selectedClassLevels.isEmpty()
-        ? (currentCharacter ? currentCharacter->level : 0)
-        : sumLevels(selectedClassLevels);
-}
-
-void PlayerPage::applyRaceDerivedBenefits(const Race &race)
-{
-    if (!currentCharacter) {
-        return;
-    }
-
-    const QMap<QString, QString> traits = normalizedRaceTraits(race.traits);
-    currentCharacter->skillProficiencies = uniqueStrings(
-        currentCharacter->skillProficiencies + racialSkillProficiencies(traits, currentCharacter->level));
-    currentCharacter->toolProficiencies = uniqueStrings(
-        currentCharacter->toolProficiencies + racialToolProficiencies(traits, currentCharacter->level));
-    currentCharacter->armorProficiencies = uniqueStrings(
-        currentCharacter->armorProficiencies + racialArmorProficiencies(traits, currentCharacter->level));
-    currentCharacter->weaponProficiencies = uniqueStrings(
-        currentCharacter->weaponProficiencies + racialWeaponProficiencies(traits, currentCharacter->level));
-}
-
-bool PlayerPage::chooseRaceGrantedSpells(const Race &race)
-{
-    if (!currentCharacter) {
-        return false;
-    }
-
-    currentCharacter->spells = removeRaceGrantedSpells(currentCharacter->spells);
-    currentCharacter->spellbook = removeRaceGrantedSpells(currentCharacter->spellbook);
-
-    const QList<Spell> allSpells = DatabaseManager::instance().getAllSpells();
-
-    for (auto it = race.traits.begin(); it != race.traits.end(); ++it) {
-        if (!isMarkedRaceSpellTraitTitle(it.key())) {
-            continue;
-        }
-
-        if (!raceTraitAvailableAtLevel(cleanedRaceTraitTitle(it.key()), it.value(), currentCharacter->level)) {
-            continue;
-        }
-
-        const QStringList spellNames = bracketedSpellNames(it.value());
-        if (spellNames.isEmpty()) {
-            QMessageBox::warning(
-                this,
-                QStringLiteral("Расовое заклинание"),
-                QStringLiteral("Для расовой способности «%1» не указано название заклинания в квадратных скобках.")
-                    .arg(cleanedRaceTraitTitle(it.key())));
-            return false;
-        }
-
-        QStringList grantedSpellNames = spellNames;
-        if (spellNames.size() > 1 && textImpliesChoice(it.value())) {
-            QList<ChoiceEntry> entries;
-            for (const QString &spellName : spellNames) {
-                Spell matchedSpell;
-                bool foundMatch = false;
-                for (const Spell &spell : allSpells) {
-                    if (normalizedName(spell.name) == normalizedName(spellName)) {
-                        matchedSpell = spell;
-                        foundMatch = true;
-                        break;
-                    }
-                }
-
-                entries.append({
-                    spellName,
-                    spellName,
-                    foundMatch ? spellDetailsText(matchedSpell) : spellName,
-                    false,
-                    QStringLiteral("Расовые заклинания")
-                });
-            }
-
-            grantedSpellNames.clear();
-            if (!chooseExactEntries(
-                    this,
-                    QStringLiteral("Расовое заклинание: %1").arg(race.name),
-                    QStringLiteral("%1\n\nВыберите %2 заклинаний для способности «%3».")
-                        .arg(it.value())
-                        .arg(choiceCountFromText(it.value()))
-                        .arg(cleanedRaceTraitTitle(it.key())),
-                    entries,
-                    qMin(choiceCountFromText(it.value()), spellNames.size()),
-                    &grantedSpellNames,
-                    QStringLiteral("заклинаний"),
-                    QStringLiteral("Все варианты"))) {
-                return false;
-            }
-        }
-
-        for (const QString &spellName : grantedSpellNames) {
-            bool found = false;
-            for (const Spell &spell : allSpells) {
-                if (normalizedName(spell.name) != normalizedName(spellName)) {
-                    continue;
-                }
-
-                Spell selectedSpell = spell;
-                selectedSpell.selectionClass = racialSpellSelectionOwner(race.name);
-                selectedSpell.source = QStringLiteral("Раса: %1").arg(race.name);
-                currentCharacter->spells.append(selectedSpell);
-                found = true;
-                break;
-            }
-
-            if (!found) {
-                QMessageBox::warning(
-                    this,
-                    QStringLiteral("Расовое заклинание"),
-                    QStringLiteral("Не удалось найти заклинание «%1» в базе для расовой способности «%2».")
-                        .arg(spellName, race.name));
-                return false;
-            }
-        }
-    }
-
-    QString cantripTraitTitle;
-    QString cantripTraitText;
-    for (auto it = race.traits.begin(); it != race.traits.end(); ++it) {
-        if (isMarkedRaceSpellTraitTitle(it.key())) {
-            continue;
-        }
-        if (it.key().contains(QStringLiteral("Заговор"), Qt::CaseInsensitive)) {
-            cantripTraitTitle = it.key().trimmed();
-            cantripTraitText = it.value().trimmed();
-            break;
-        }
-    }
-
-    if (cantripTraitText.isEmpty()) {
-        return true;
-    }
-
-    const QString spellListClass = spellListClassFromTraitText(cantripTraitText);
-    if (spellListClass.isEmpty()) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Расовый заговор"),
-            QStringLiteral("Не удалось определить список заклинаний для расовой способности «%1».").arg(race.name));
-        return false;
-    }
-
-    QList<Spell> availableCantrips;
-    for (const Spell &spell : allSpells) {
-        if (spell.level == 0 && spell.classes.contains(spellListClass, Qt::CaseInsensitive)) {
-            availableCantrips.append(spell);
-        }
-    }
-
-    if (availableCantrips.isEmpty()) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Расовый заговор"),
-            QStringLiteral("Не удалось найти заговоры класса «%1» для выбора расовой способности.").arg(spellListClass));
-        return false;
-    }
-
-    std::sort(availableCantrips.begin(), availableCantrips.end(), [](const Spell &left, const Spell &right) {
-        if (left.level != right.level) {
-            return left.level < right.level;
-        }
-        return left.name.localeAwareCompare(right.name) < 0;
-    });
-
-    QList<ChoiceEntry> entries;
-    for (const Spell &spell : availableCantrips) {
-        entries.append({
-            spell.name,
-            spellChoiceTitle(spell),
-            spellDetailsText(spell),
-            false,
-            spellLevelLabel(spell.level)
-        });
-    }
-
-    SearchableChoiceDialog dialog(
-        QStringLiteral("Расовый заговор: %1").arg(race.name),
-        QStringLiteral("%1\n\nВыберите один заговор из списка класса «%2».")
-            .arg(cantripTraitText, spellListClass),
-        entries,
-        false,
-        this,
-        -1,
-        QString(),
-        QStringLiteral("Все уровни"));
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return false;
-    }
-
-    const QString selectedCantripName = dialog.selectedKey().trimmed();
-    if (selectedCantripName.isEmpty()) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Расовый заговор"),
-            QStringLiteral("Нужно выбрать заговор для расовой способности."));
-        return false;
-    }
-
-    for (const Spell &spell : availableCantrips) {
-        if (spell.name != selectedCantripName) {
-            continue;
-        }
-
-        Spell selectedSpell = spell;
-        selectedSpell.selectionClass = racialSpellSelectionOwner(race.name);
-        selectedSpell.source = QStringLiteral("Раса: %1").arg(race.name);
-        currentCharacter->spells.append(selectedSpell);
-        return true;
-    }
-
-    QMessageBox::warning(
-        this,
-        QStringLiteral("Расовый заговор"),
-        QStringLiteral("Не удалось сохранить выбранный расовый заговор."));
-    return false;
-}
-
-QString PlayerPage::lastTakenClassName() const
-{
-    for (int index = classSelectionOrder.size() - 1; index >= 0; --index) {
-        const QString className = classSelectionOrder.at(index);
-        if (selectedClassLevels.value(className, 0) > 0) {
-            return className;
-        }
-    }
-
-    for (auto it = selectedClassLevels.constBegin(); it != selectedClassLevels.constEnd(); ++it) {
-        if (it.value() > 0) {
-            return it.key();
-        }
-    }
-
-    return QString();
-}
-
-namespace {
-
 QStringList standardSkillNames()
 {
     return {
@@ -2999,9 +2391,446 @@ bool classSectionNeedsPlayerChoice(const ClassSection &section, int classLevel)
 
 }
 
-bool PlayerPage::chooseClassSkillProficiencies(Class &cls, bool multiclassEntry)
+CharacterCreationService::CharacterCreationService(QObject *parent)
+    : QObject(parent)
 {
-    if (!currentCharacter) {
+    m_racePage = new RaceSelectionPage;
+    m_classPage = new ClassSelectionPage;
+}
+
+CharacterCreationService::~CharacterCreationService()
+{
+    delete m_racePage;
+    delete m_classPage;
+}
+
+void CharacterCreationService::setParentWidget(QWidget *widget)
+{
+    m_parentWidget = widget;
+}
+
+void CharacterCreationService::setCharacter(Character *character)
+{
+    m_character = character;
+}
+
+void CharacterCreationService::setTargetLevel(int level)
+{
+    m_targetLevel = qBound(1, level, 20);
+    if (m_character) {
+        m_character->level = m_targetLevel;
+    }
+}
+
+void CharacterCreationService::setBaseAbilityScores(const QMap<QString, int> &scores)
+{
+    m_baseAbilityScores = scores;
+}
+
+void CharacterCreationService::resetForNpc()
+{
+    m_levelUpInProgress = false;
+    m_levelUpChoosingMulticlass = false;
+}
+
+int CharacterCreationService::remainingLevelsToAllocate() const
+{
+    return qMax(0, m_targetLevel - m_allocatedClassLevels);
+}
+
+void CharacterCreationService::syncAbilityScoresFromCharacter()
+{
+    if (!m_character) {
+        return;
+    }
+    m_baseAbilityScores.clear();
+    m_baseAbilityScores.insert(QStringLiteral("Сила"), m_character->strength);
+    m_baseAbilityScores.insert(QStringLiteral("Ловкость"), m_character->dexterity);
+    m_baseAbilityScores.insert(QStringLiteral("Телосложение"), m_character->constitution);
+    m_baseAbilityScores.insert(QStringLiteral("Интеллект"), m_character->intelligence);
+    m_baseAbilityScores.insert(QStringLiteral("Мудрость"), m_character->wisdom);
+    m_baseAbilityScores.insert(QStringLiteral("Харизма"), m_character->charisma);
+}
+
+bool CharacterCreationService::applyRaceSelection(const Race &race)
+{
+    if (!m_character || !m_parentWidget) {
+        return false;
+    }
+
+    resetClassSelection();
+    applyBaseAbilityScores();
+
+    Race resolvedRace = race;
+    if (!applyRaceTraitChoices(m_parentWidget, race, m_character->level, &resolvedRace)) {
+        return false;
+    }
+
+    m_character->setRace(resolvedRace.name);
+    m_character->size = resolvedRace.size;
+    m_character->speed = resolvedRace.speed;
+    m_character->flyingSpeed = resolvedRace.flyingSpeed;
+
+    QStringList resolvedRaceLanguages;
+    if (!resolveChosenLanguages(raceLanguageEntriesForSelection(resolvedRace), resolvedRace.name, {}, &resolvedRaceLanguages)) {
+        return false;
+    }
+
+    if (!applyRaceAbilityBonuses(resolvedRace)) {
+        return false;
+    }
+
+    m_character->languages = resolvedRaceLanguages;
+
+    if (!chooseRaceGrantedSpells(resolvedRace)) {
+        return false;
+    }
+
+    m_character->traits = filteredRaceTraits(resolvedRace.traits);
+    const QStringList baseSkills = m_character->skillProficiencies;
+    const QStringList baseTools = m_character->toolProficiencies;
+    const QStringList baseArmor = m_character->armorProficiencies;
+    const QStringList baseWeapons = m_character->weaponProficiencies;
+    applyRaceDerivedBenefits(resolvedRace);
+
+    if (!applyRaceChoiceBenefits(m_parentWidget, resolvedRace, m_character, baseSkills, baseTools, baseArmor, baseWeapons)) {
+        m_character->skillProficiencies = baseSkills;
+        m_character->toolProficiencies = baseTools;
+        m_character->armorProficiencies = baseArmor;
+        m_character->weaponProficiencies = baseWeapons;
+        return false;
+    }
+
+    m_character->recalculateDerivedStats(false);
+    return true;
+}
+
+bool CharacterCreationService::showRacePicker(Race *selectedRace)
+{
+    if (!m_parentWidget || !selectedRace) {
+        return false;
+    }
+
+    QDialog dialog(m_parentWidget);
+    dialog.setWindowTitle(QStringLiteral("Выбор расы"));
+    dialog.resize(980, 720);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *page = new RaceSelectionPage(&dialog);
+    layout->addWidget(page);
+    page->showList();
+
+    Race chosen;
+    bool accepted = false;
+    QObject::connect(page, &RaceSelectionPage::raceChosen, &dialog, [&](const Race &race) {
+        chosen = race;
+        accepted = true;
+        dialog.accept();
+    });
+
+    if (dialog.exec() != QDialog::Accepted || !accepted) {
+        return false;
+    }
+
+    *selectedRace = chosen;
+    return true;
+}
+
+bool CharacterCreationService::showClassPicker(Class *selectedClass)
+{
+    if (!m_parentWidget || !selectedClass) {
+        return false;
+    }
+
+    QDialog dialog(m_parentWidget);
+    dialog.setWindowTitle(QStringLiteral("Выбор класса"));
+    dialog.resize(980, 720);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *page = new ClassSelectionPage(&dialog);
+    layout->addWidget(page);
+    page->clearClassFilters();
+    page->showList();
+
+    Class chosen;
+    bool accepted = false;
+    QObject::connect(page, &ClassSelectionPage::classChosen, &dialog, [&](const Class &cls) {
+        chosen = cls;
+        accepted = true;
+        dialog.accept();
+    });
+
+    if (dialog.exec() != QDialog::Accepted || !accepted) {
+        return false;
+    }
+
+    *selectedClass = chosen;
+    return true;
+}
+void CharacterCreationService::resetClassSelection()
+{
+    m_allocatedClassLevels = 0;
+    m_selectedClassLevels.clear();
+    m_selectedClasses.clear();
+    m_selectedSubclassNames.clear();
+    m_selectedClassSkillSelections.clear();
+    m_selectedClassFeatureChoices.clear();
+    m_classSelectionOrder.clear();
+
+    if (m_character) {
+        m_character->setCharacterClass("");
+        m_character->classLevels.clear();
+        m_character->classHitDice.clear();
+        m_character->subclassSelections.clear();
+        m_character->classSkillSelections.clear();
+        m_character->classFeatureChoices.clear();
+        m_character->classOrder.clear();
+        m_character->savingThrowProficiencies.clear();
+        m_character->armorProficiencies.clear();
+        m_character->weaponProficiencies.clear();
+        m_character->hitDie = 0;
+        m_character->maxHp = 0;
+        m_character->currentHp = 0;
+        m_character->tempHp = 0;
+        m_character->spells.clear();
+        m_character->spellbook.clear();
+    }
+}
+void CharacterCreationService::updateCharacterClassSummary()
+{
+    if (!m_character) {
+        return;
+    }
+
+    QStringList parts;
+    for (const QString &className : m_classSelectionOrder) {
+        const int classLevel = m_selectedClassLevels.value(className, 0);
+        if (classLevel > 0) {
+            const QString subclassName = m_selectedSubclassNames.value(className).trimmed();
+            parts << (subclassName.isEmpty()
+                ? QString("%1 %2").arg(className).arg(classLevel)
+                : QString("%1 %2 (%3)").arg(className).arg(classLevel).arg(subclassName));
+        }
+    }
+
+    m_character->setCharacterClass(parts.join(" / "));
+}
+void CharacterCreationService::applyRaceDerivedBenefits(const Race &race)
+{
+    if (!m_character) {
+        return;
+    }
+
+    const QMap<QString, QString> traits = normalizedRaceTraits(race.traits);
+    m_character->skillProficiencies = uniqueStrings(
+        m_character->skillProficiencies + racialSkillProficiencies(traits, m_character->level));
+    m_character->toolProficiencies = uniqueStrings(
+        m_character->toolProficiencies + racialToolProficiencies(traits, m_character->level));
+    m_character->armorProficiencies = uniqueStrings(
+        m_character->armorProficiencies + racialArmorProficiencies(traits, m_character->level));
+    m_character->weaponProficiencies = uniqueStrings(
+        m_character->weaponProficiencies + racialWeaponProficiencies(traits, m_character->level));
+}
+bool CharacterCreationService::chooseRaceGrantedSpells(const Race &race)
+{
+    if (!m_character) {
+        return false;
+    }
+
+    m_character->spells = removeRaceGrantedSpells(m_character->spells);
+    m_character->spellbook = removeRaceGrantedSpells(m_character->spellbook);
+
+    const QList<Spell> allSpells = DatabaseManager::instance().getAllSpells();
+
+    for (auto it = race.traits.begin(); it != race.traits.end(); ++it) {
+        if (!isMarkedRaceSpellTraitTitle(it.key())) {
+            continue;
+        }
+
+        if (!raceTraitAvailableAtLevel(cleanedRaceTraitTitle(it.key()), it.value(), m_character->level)) {
+            continue;
+        }
+
+        const QStringList spellNames = bracketedSpellNames(it.value());
+        if (spellNames.isEmpty()) {
+            QMessageBox::warning(
+                m_parentWidget,
+                QStringLiteral("Расовое заклинание"),
+                QStringLiteral("Для расовой способности «%1» не указано название заклинания в квадратных скобках.")
+                    .arg(cleanedRaceTraitTitle(it.key())));
+            return false;
+        }
+
+        QStringList grantedSpellNames = spellNames;
+        if (spellNames.size() > 1 && textImpliesChoice(it.value())) {
+            QList<ChoiceEntry> entries;
+            for (const QString &spellName : spellNames) {
+                Spell matchedSpell;
+                bool foundMatch = false;
+                for (const Spell &spell : allSpells) {
+                    if (normalizedName(spell.name) == normalizedName(spellName)) {
+                        matchedSpell = spell;
+                        foundMatch = true;
+                        break;
+                    }
+                }
+
+                entries.append({
+                    spellName,
+                    spellName,
+                    foundMatch ? spellDetailsText(matchedSpell) : spellName,
+                    false,
+                    QStringLiteral("Расовые заклинания")
+                });
+            }
+
+            grantedSpellNames.clear();
+            if (!chooseExactEntries(
+                    m_parentWidget,
+                    QStringLiteral("Расовое заклинание: %1").arg(race.name),
+                    QStringLiteral("%1\n\nВыберите %2 заклинаний для способности «%3».")
+                        .arg(it.value())
+                        .arg(choiceCountFromText(it.value()))
+                        .arg(cleanedRaceTraitTitle(it.key())),
+                    entries,
+                    qMin(choiceCountFromText(it.value()), spellNames.size()),
+                    &grantedSpellNames,
+                    QStringLiteral("заклинаний"),
+                    QStringLiteral("Все варианты"))) {
+                return false;
+            }
+        }
+
+        for (const QString &spellName : grantedSpellNames) {
+            bool found = false;
+            for (const Spell &spell : allSpells) {
+                if (normalizedName(spell.name) != normalizedName(spellName)) {
+                    continue;
+                }
+
+                Spell selectedSpell = spell;
+                selectedSpell.selectionClass = racialSpellSelectionOwner(race.name);
+                selectedSpell.source = QStringLiteral("Раса: %1").arg(race.name);
+                m_character->spells.append(selectedSpell);
+                found = true;
+                break;
+            }
+
+            if (!found) {
+                QMessageBox::warning(
+                    m_parentWidget,
+                    QStringLiteral("Расовое заклинание"),
+                    QStringLiteral("Не удалось найти заклинание «%1» в базе для расовой способности «%2».")
+                        .arg(spellName, race.name));
+                return false;
+            }
+        }
+    }
+
+    QString cantripTraitTitle;
+    QString cantripTraitText;
+    for (auto it = race.traits.begin(); it != race.traits.end(); ++it) {
+        if (isMarkedRaceSpellTraitTitle(it.key())) {
+            continue;
+        }
+        if (it.key().contains(QStringLiteral("Заговор"), Qt::CaseInsensitive)) {
+            cantripTraitTitle = it.key().trimmed();
+            cantripTraitText = it.value().trimmed();
+            break;
+        }
+    }
+
+    if (cantripTraitText.isEmpty()) {
+        return true;
+    }
+
+    const QString spellListClass = spellListClassFromTraitText(cantripTraitText);
+    if (spellListClass.isEmpty()) {
+        QMessageBox::warning(
+            m_parentWidget,
+            QStringLiteral("Расовый заговор"),
+            QStringLiteral("Не удалось определить список заклинаний для расовой способности «%1».").arg(race.name));
+        return false;
+    }
+
+    QList<Spell> availableCantrips;
+    for (const Spell &spell : allSpells) {
+        if (spell.level == 0 && spell.classes.contains(spellListClass, Qt::CaseInsensitive)) {
+            availableCantrips.append(spell);
+        }
+    }
+
+    if (availableCantrips.isEmpty()) {
+        QMessageBox::warning(
+            m_parentWidget,
+            QStringLiteral("Расовый заговор"),
+            QStringLiteral("Не удалось найти заговоры класса «%1» для выбора расовой способности.").arg(spellListClass));
+        return false;
+    }
+
+    std::sort(availableCantrips.begin(), availableCantrips.end(), [](const Spell &left, const Spell &right) {
+        if (left.level != right.level) {
+            return left.level < right.level;
+        }
+        return left.name.localeAwareCompare(right.name) < 0;
+    });
+
+    QList<ChoiceEntry> entries;
+    for (const Spell &spell : availableCantrips) {
+        entries.append({
+            spell.name,
+            spellChoiceTitle(spell),
+            spellDetailsText(spell),
+            false,
+            spellLevelLabel(spell.level)
+        });
+    }
+
+    SearchableChoiceDialog dialog(
+        QStringLiteral("Расовый заговор: %1").arg(race.name),
+        QStringLiteral("%1\n\nВыберите один заговор из списка класса «%2».")
+            .arg(cantripTraitText, spellListClass),
+        entries,
+        false,
+        m_parentWidget,
+        -1,
+        QString(),
+        QStringLiteral("Все уровни"));
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return false;
+    }
+
+    const QString selectedCantripName = dialog.selectedKey().trimmed();
+    if (selectedCantripName.isEmpty()) {
+        QMessageBox::warning(
+            m_parentWidget,
+            QStringLiteral("Расовый заговор"),
+            QStringLiteral("Нужно выбрать заговор для расовой способности."));
+        return false;
+    }
+
+    for (const Spell &spell : availableCantrips) {
+        if (spell.name != selectedCantripName) {
+            continue;
+        }
+
+        Spell selectedSpell = spell;
+        selectedSpell.selectionClass = racialSpellSelectionOwner(race.name);
+        selectedSpell.source = QStringLiteral("Раса: %1").arg(race.name);
+        m_character->spells.append(selectedSpell);
+        return true;
+    }
+
+    QMessageBox::warning(
+        m_parentWidget,
+        QStringLiteral("Расовый заговор"),
+        QStringLiteral("Не удалось сохранить выбранный расовый заговор."));
+    return false;
+}
+bool CharacterCreationService::chooseClassSkillProficiencies(Class &cls, bool multiclassEntry)
+{
+    if (!m_character) {
         return false;
     }
 
@@ -3011,7 +2840,7 @@ bool PlayerPage::chooseClassSkillProficiencies(Class &cls, bool multiclassEntry)
     }
 
     const QString className = cls.name;
-    QStringList existing = selectedClassSkillSelections.value(className);
+    QStringList existing = m_selectedClassSkillSelections.value(className);
     if (existing.size() >= request.count) {
         return true;
     }
@@ -3039,7 +2868,7 @@ bool PlayerPage::chooseClassSkillProficiencies(Class &cls, bool multiclassEntry)
         prompt,
         entries,
         true,
-        this,
+        m_parentWidget,
         request.count,
         QStringLiteral("Можно выбрать не больше %1 навыков.").arg(request.count));
 
@@ -3050,20 +2879,19 @@ bool PlayerPage::chooseClassSkillProficiencies(Class &cls, bool multiclassEntry)
     const QStringList selected = dialog.selectedKeys();
     if (selected.size() != request.count) {
         QMessageBox::warning(
-            this,
+            m_parentWidget,
             QStringLiteral("Владение навыками"),
             QStringLiteral("Нужно выбрать ровно %1 навыка.").arg(request.count));
         return false;
     }
 
-    selectedClassSkillSelections[className] = selected;
-    currentCharacter->classSkillSelections[className] = selected;
+    m_selectedClassSkillSelections[className] = selected;
+    m_character->classSkillSelections[className] = selected;
     return true;
 }
-
-bool PlayerPage::chooseClassFeatureChoices(const Class &cls, int classLevel)
+bool CharacterCreationService::chooseClassFeatureChoices(const Class &cls, int classLevel)
 {
-    if (!currentCharacter) {
+    if (!m_character) {
         return false;
     }
 
@@ -3073,7 +2901,7 @@ bool PlayerPage::chooseClassFeatureChoices(const Class &cls, int classLevel)
         }
 
         const QString choiceKey = classFeatureChoiceKey(cls.name, section.title);
-        if (!selectedClassFeatureChoices.value(choiceKey).trimmed().isEmpty()) {
+        if (!m_selectedClassFeatureChoices.value(choiceKey).trimmed().isEmpty()) {
             continue;
         }
 
@@ -3097,7 +2925,7 @@ bool PlayerPage::chooseClassFeatureChoices(const Class &cls, int classLevel)
                 .arg(cls.name, section.title.trimmed()),
             entries,
             false,
-            this);
+            m_parentWidget);
 
         if (dialog.exec() != QDialog::Accepted) {
             return false;
@@ -3106,44 +2934,43 @@ bool PlayerPage::chooseClassFeatureChoices(const Class &cls, int classLevel)
         const QString selected = dialog.selectedKey().trimmed();
         if (selected.isEmpty()) {
             QMessageBox::warning(
-                this,
+                m_parentWidget,
                 QStringLiteral("Выбор умения"),
                 QStringLiteral("Нужно выбрать вариант для умения «%1».").arg(section.title.trimmed()));
             return false;
         }
 
-        selectedClassFeatureChoices.insert(choiceKey, selected);
-        currentCharacter->classFeatureChoices.insert(choiceKey, selected);
+        m_selectedClassFeatureChoices.insert(choiceKey, selected);
+        m_character->classFeatureChoices.insert(choiceKey, selected);
     }
 
     return true;
 }
-
-bool PlayerPage::applyClassLevelChange(const Class &cls, int levelsToAdd)
+bool CharacterCreationService::applyClassLevelChange(const Class &cls, int levelsToAdd)
 {
-    if (!currentCharacter || levelsToAdd <= 0 || cls.name.trimmed().isEmpty()) {
+    if (!m_character || levelsToAdd <= 0 || cls.name.trimmed().isEmpty()) {
         return false;
     }
 
-    Class selectedClass = classPage->getClassData(cls.name);
+    Class selectedClass = m_classPage->getClassData(cls.name);
     if (selectedClass.name.trimmed().isEmpty()) {
         selectedClass = cls;
     }
-    const int priorClassLevel = selectedClassLevels.value(cls.name, 0);
+    const int priorClassLevel = m_selectedClassLevels.value(cls.name, 0);
     const int totalClassLevel = priorClassLevel + levelsToAdd;
-    const bool multiclassEntry = priorClassLevel == 0 && sumLevels(selectedClassLevels) > 0;
+    const bool multiclassEntry = priorClassLevel == 0 && sumLevels(m_selectedClassLevels) > 0;
 
     if (!chooseClassSkillProficiencies(selectedClass, multiclassEntry)) {
         return false;
     }
 
-    const QString previousSubclass = selectedSubclassNames.value(cls.name).trimmed();
+    const QString previousSubclass = m_selectedSubclassNames.value(cls.name).trimmed();
     if (subclassNameExists(selectedClass, previousSubclass)) {
         selectedClass.selectedSubclassName = previousSubclass;
     }
     if (subclassChoiceLevel(selectedClass) > totalClassLevel) {
         selectedClass.selectedSubclassName.clear();
-        selectedSubclassNames.remove(cls.name);
+        m_selectedSubclassNames.remove(cls.name);
     }
 
     if (!chooseSubclassForClass(&selectedClass, totalClassLevel)) {
@@ -3154,111 +2981,23 @@ bool PlayerPage::applyClassLevelChange(const Class &cls, int levelsToAdd)
         return false;
     }
 
-    selectedClassLevels[cls.name] = totalClassLevel;
-    selectedClasses[cls.name] = selectedClass;
+    m_selectedClassLevels[cls.name] = totalClassLevel;
+    m_selectedClasses[cls.name] = selectedClass;
     if (!selectedClass.selectedSubclassName.trimmed().isEmpty()) {
-        selectedSubclassNames[cls.name] = selectedClass.selectedSubclassName.trimmed();
+        m_selectedSubclassNames[cls.name] = selectedClass.selectedSubclassName.trimmed();
     }
-    if (!classSelectionOrder.contains(cls.name)) {
-        classSelectionOrder << cls.name;
+    if (!m_classSelectionOrder.contains(cls.name)) {
+        m_classSelectionOrder << cls.name;
     }
 
-    synchronizeCharacterFromClasses(!levelUpInProgress);
+    synchronizeCharacterFromClasses(!m_levelUpInProgress);
     return true;
 }
-
-void PlayerPage::levelUpCharacter()
+bool CharacterCreationService::chooseBaseAbilityScores()
 {
-    if (!currentCharacter) {
-        QMessageBox::information(this, QStringLiteral("Повышение уровня"), QStringLiteral("Сначала создайте или загрузите персонажа."));
-        return;
-    }
+    m_baseAbilityScores.clear();
 
-    if (currentCharacter->level >= 20) {
-        QMessageBox::information(this, QStringLiteral("Повышение уровня"), QStringLiteral("Персонаж уже достиг максимального 20 уровня."));
-        return;
-    }
-
-    if (currentCharacter->classLevels.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("Повышение уровня"), QStringLiteral("У персонажа не выбраны классы. Завершите создание персонажа полностью."));
-        return;
-    }
-
-    levelUpInProgress = true;
-    levelUpChoosingMulticlass = false;
-    levelUpPreviousMaxHp = currentCharacter->maxHp;
-    levelUpPreviousFeatSlots = totalFeatSlots(currentCharacter->classLevels);
-    levelUpSnapshot = currentCharacter->toJson();
-    targetCharacterLevel = qMin(20, currentCharacter->level + 1);
-    prepareSelectedClassesFromCharacter();
-
-    const QString lastClassName = lastTakenClassName();
-    QMessageBox choiceBox(this);
-    choiceBox.setIcon(QMessageBox::Question);
-    choiceBox.setWindowTitle(QStringLiteral("Повышение уровня"));
-    choiceBox.setText(QStringLiteral("Персонаж будет повышен до уровня %1.").arg(targetCharacterLevel));
-    choiceBox.setInformativeText(QStringLiteral("Куда добавить новый уровень?"));
-
-    QPushButton *lastClassBtn = nullptr;
-    if (!lastClassName.isEmpty()) {
-        lastClassBtn = choiceBox.addButton(
-            QStringLiteral("Повысить «%1»").arg(lastClassName),
-            QMessageBox::AcceptRole);
-    }
-    QPushButton *multiclassBtn = choiceBox.addButton(
-        QStringLiteral("Взять новый класс (мультикласс)"),
-        QMessageBox::AcceptRole);
-    QPushButton *cancelBtn = choiceBox.addButton(QStringLiteral("Отмена"), QMessageBox::RejectRole);
-    choiceBox.exec();
-
-    if (choiceBox.clickedButton() == cancelBtn) {
-        cancelPendingLevelUp(true);
-        return;
-    }
-
-    if (lastClassBtn && choiceBox.clickedButton() == lastClassBtn) {
-        Class selectedClass = selectedClasses.value(lastClassName);
-        if (selectedClass.name.isEmpty()) {
-            selectedClass = classPage->getClassData(lastClassName);
-        }
-        if (selectedClass.name.isEmpty()) {
-            QMessageBox::warning(
-                this,
-                QStringLiteral("Повышение уровня"),
-                QStringLiteral("Не удалось загрузить данные класса «%1».").arg(lastClassName));
-            cancelPendingLevelUp(true);
-            return;
-        }
-
-        if (!applyClassLevelChange(selectedClass, 1)) {
-            cancelPendingLevelUp(true);
-            return;
-        }
-
-        completeCharacterCreation();
-        return;
-    }
-
-    if (choiceBox.clickedButton() == multiclassBtn) {
-        levelUpChoosingMulticlass = true;
-        classPage->setExcludedClassNames(selectedClassLevels.keys());
-        charStack->setCurrentIndex(2);
-        classPage->showList();
-        QMessageBox::information(
-            this,
-            QStringLiteral("Мультикласс"),
-            QStringLiteral("Выберите новый класс. Уровни уже взятых классов скрыты."));
-        return;
-    }
-
-    cancelPendingLevelUp(true);
-}
-
-bool PlayerPage::chooseBaseAbilityScores()
-{
-    baseAbilityScores.clear();
-
-    QMessageBox modeBox(this);
+    QMessageBox modeBox(m_parentWidget);
     modeBox.setIcon(QMessageBox::Question);
     modeBox.setWindowTitle("Распределение характеристик");
     modeBox.setText("Выберите способ определения стартовых характеристик:");
@@ -3287,7 +3026,7 @@ bool PlayerPage::chooseBaseAbilityScores()
 
             bool ok = false;
             QString selected = QInputDialog::getItem(
-                this,
+                m_parentWidget,
                 "Распределение характеристик",
                 QString("Выберите значение для характеристики «%1»:").arg(statName),
                 options,
@@ -3296,7 +3035,7 @@ bool PlayerPage::chooseBaseAbilityScores()
                 &ok);
 
             if (!ok || selected.isEmpty()) {
-                baseAbilityScores.clear();
+                m_baseAbilityScores.clear();
                 return false;
             }
 
@@ -3313,34 +3052,54 @@ bool PlayerPage::chooseBaseAbilityScores()
         }
 
         QMessageBox::information(
-            this,
+            m_parentWidget,
             "Результаты бросков 4к6",
             QString("Сгенерированные характеристики:\n%1").arg(rollLines.join("\n")));
     } else {
         return false;
     }
 
-    baseAbilityScores = chosenScores;
+    m_baseAbilityScores = chosenScores;
     return true;
 }
-
-void PlayerPage::applyBaseAbilityScores()
+void CharacterCreationService::applyBaseAbilityScores()
 {
-    if (!currentCharacter || baseAbilityScores.isEmpty()) {
+    if (!m_character || m_baseAbilityScores.isEmpty()) {
         return;
     }
 
-    currentCharacter->strength = baseAbilityScores.value("Сила", 10);
-    currentCharacter->dexterity = baseAbilityScores.value("Ловкость", 10);
-    currentCharacter->constitution = baseAbilityScores.value("Телосложение", 10);
-    currentCharacter->intelligence = baseAbilityScores.value("Интеллект", 10);
-    currentCharacter->wisdom = baseAbilityScores.value("Мудрость", 10);
-    currentCharacter->charisma = baseAbilityScores.value("Харизма", 10);
+    m_character->strength = m_baseAbilityScores.value("Сила", 10);
+    m_character->dexterity = m_baseAbilityScores.value("Ловкость", 10);
+    m_character->constitution = m_baseAbilityScores.value("Телосложение", 10);
+    m_character->intelligence = m_baseAbilityScores.value("Интеллект", 10);
+    m_character->wisdom = m_baseAbilityScores.value("Мудрость", 10);
+    m_character->charisma = m_baseAbilityScores.value("Харизма", 10);
 }
 
-bool PlayerPage::applyRaceAbilityBonuses(const Race &race)
+void CharacterCreationService::applyAbilityIncrease(const QString &abilityName, int amount)
 {
-    if (!currentCharacter) {
+    if (!m_character || amount <= 0) {
+        return;
+    }
+
+    if (abilityName == QStringLiteral("Сила")) {
+        m_character->strength = Character::clampAbilityScore(m_character->strength + amount);
+    } else if (abilityName == QStringLiteral("Ловкость")) {
+        m_character->dexterity = Character::clampAbilityScore(m_character->dexterity + amount);
+    } else if (abilityName == QStringLiteral("Телосложение")) {
+        m_character->constitution = Character::clampAbilityScore(m_character->constitution + amount);
+    } else if (abilityName == QStringLiteral("Интеллект")) {
+        m_character->intelligence = Character::clampAbilityScore(m_character->intelligence + amount);
+    } else if (abilityName == QStringLiteral("Мудрость")) {
+        m_character->wisdom = Character::clampAbilityScore(m_character->wisdom + amount);
+    } else if (abilityName == QStringLiteral("Харизма")) {
+        m_character->charisma = Character::clampAbilityScore(m_character->charisma + amount);
+    }
+}
+
+bool CharacterCreationService::applyRaceAbilityBonuses(const Race &race)
+{
+    if (!m_character) {
         return false;
     }
 
@@ -3365,7 +3124,7 @@ bool PlayerPage::applyRaceAbilityBonuses(const Race &race)
                 QStringLiteral("У этой расы есть несколько вариантов увеличения характеристик. Сначала выберите вариант."),
                 entries,
                 false,
-                this);
+                m_parentWidget);
 
             if (dialog.exec() != QDialog::Accepted) {
                 return false;
@@ -3395,7 +3154,7 @@ bool PlayerPage::applyRaceAbilityBonuses(const Race &race)
             QStringLiteral("Выберите один из вариантов распределения бонусов характеристик."),
             entries,
             false,
-            this);
+            m_parentWidget);
 
         if (dialog.exec() != QDialog::Accepted) {
             return false;
@@ -3418,33 +3177,33 @@ bool PlayerPage::applyRaceAbilityBonuses(const Race &race)
                 lowered.contains(QStringLiteral("на 2")) &&
                 lowered.contains(QStringLiteral("другой")) &&
                 lowered.contains(QStringLiteral("на 1"))) {
-                if (!chooseAbilityIncreaseTargets(this, race.name, QStringLiteral("Выберите характеристику для бонуса +2."), 1, 2, {}, &bonuses)) {
+                if (!chooseAbilityIncreaseTargets(m_parentWidget, race.name, QStringLiteral("Выберите характеристику для бонуса +2."), 1, 2, {}, &bonuses)) {
                     return false;
                 }
-                if (!chooseAbilityIncreaseTargets(this, race.name, QStringLiteral("Выберите другую характеристику для бонуса +1."), 1, 1, bonuses.keys(), &bonuses)) {
+                if (!chooseAbilityIncreaseTargets(m_parentWidget, race.name, QStringLiteral("Выберите другую характеристику для бонуса +1."), 1, 1, bonuses.keys(), &bonuses)) {
                     return false;
                 }
             } else if (lowered.contains(QStringLiteral("трех различных характеристик")) || lowered.contains(QStringLiteral("трёх различных характеристик"))) {
-                if (!chooseAbilityIncreaseTargets(this, race.name, QStringLiteral("Выберите три разные характеристики для бонуса +1."), 3, 1, {}, &bonuses)) {
+                if (!chooseAbilityIncreaseTargets(m_parentWidget, race.name, QStringLiteral("Выберите три разные характеристики для бонуса +1."), 3, 1, {}, &bonuses)) {
                     return false;
                 }
             } else if (lowered.contains(QStringLiteral("двух других характеристик")) && lowered.contains(QStringLiteral("на ваш выбор"))) {
-                if (!chooseAbilityIncreaseTargets(this, race.name, QStringLiteral("Выберите две другие характеристики для бонуса +1."), 2, 1, bonuses.keys(), &bonuses)) {
+                if (!chooseAbilityIncreaseTargets(m_parentWidget, race.name, QStringLiteral("Выберите две другие характеристики для бонуса +1."), 2, 1, bonuses.keys(), &bonuses)) {
                     return false;
                 }
             } else if ((lowered.contains(QStringLiteral("двух разных характеристик")) || lowered.contains(QStringLiteral("двух различных характеристик"))) && lowered.contains(QStringLiteral("на ваш выбор"))) {
-                if (!chooseAbilityIncreaseTargets(this, race.name, QStringLiteral("Выберите две разные характеристики для бонуса +1."), 2, 1, {}, &bonuses)) {
+                if (!chooseAbilityIncreaseTargets(m_parentWidget, race.name, QStringLiteral("Выберите две разные характеристики для бонуса +1."), 2, 1, {}, &bonuses)) {
                     return false;
                 }
             } else if (lowered.contains(QStringLiteral("одной другой характеристики")) && lowered.contains(QStringLiteral("на ваш выбор"))) {
-                if (!chooseAbilityIncreaseTargets(this, race.name, QStringLiteral("Выберите другую характеристику для бонуса +1."), 1, 1, bonuses.keys(), &bonuses)) {
+                if (!chooseAbilityIncreaseTargets(m_parentWidget, race.name, QStringLiteral("Выберите другую характеристику для бонуса +1."), 1, 1, bonuses.keys(), &bonuses)) {
                     return false;
                 }
             } else if (lowered.contains(QStringLiteral("одной характеристики")) && lowered.contains(QStringLiteral("на ваш выбор"))) {
                 const QRegularExpression amountRegex(QStringLiteral("одной характеристики[^.\\n]{0,80}?на\\s*(\\d+)"), QRegularExpression::CaseInsensitiveOption);
                 const QRegularExpressionMatch amountMatch = amountRegex.match(selectedAbilityText);
                 const int amount = amountMatch.hasMatch() ? amountMatch.captured(1).toInt() : 1;
-                if (!chooseAbilityIncreaseTargets(this, race.name, QString("Выберите характеристику для бонуса +%1.").arg(amount), 1, amount, {}, &bonuses)) {
+                if (!chooseAbilityIncreaseTargets(m_parentWidget, race.name, QString("Выберите характеристику для бонуса +%1.").arg(amount), 1, amount, {}, &bonuses)) {
                     return false;
                 }
             }
@@ -3478,8 +3237,7 @@ bool PlayerPage::applyRaceAbilityBonuses(const Race &race)
 
     return true;
 }
-
-bool PlayerPage::resolveChosenLanguages(const QStringList &languageEntries, const QString &sourceName, const QStringList &existingLanguages, QStringList *resolvedLanguages)
+bool CharacterCreationService::resolveChosenLanguages(const QStringList &languageEntries, const QString &sourceName, const QStringList &existingLanguages, QStringList *resolvedLanguages)
 {
     if (!resolvedLanguages) {
         return false;
@@ -3540,7 +3298,7 @@ bool PlayerPage::resolveChosenLanguages(const QStringList &languageEntries, cons
 
             if (availableLanguages.isEmpty()) {
                 QMessageBox::warning(
-                    this,
+                    m_parentWidget,
                     QString("Языки для %1").arg(sourceName),
                     QStringLiteral("Не осталось доступных языков для выбора без дубликатов."));
                 return false;
@@ -3548,7 +3306,7 @@ bool PlayerPage::resolveChosenLanguages(const QStringList &languageEntries, cons
 
             bool ok = false;
             const QString language = QInputDialog::getItem(
-                this,
+                m_parentWidget,
                 QString("Язык для %1").arg(sourceName),
                 QString("Выберите язык %1 из %2:").arg(index + 1).arg(count),
                 availableLanguages,
@@ -3562,7 +3320,7 @@ bool PlayerPage::resolveChosenLanguages(const QStringList &languageEntries, cons
 
             if (containsByName(existingLanguages + resolved, language)) {
                 QMessageBox::warning(
-                    this,
+                    m_parentWidget,
                     QString("Языки для %1").arg(sourceName),
                     QString("Язык «%1» уже выбран и не может дублироваться.").arg(language));
                 return false;
@@ -3575,325 +3333,7 @@ bool PlayerPage::resolveChosenLanguages(const QStringList &languageEntries, cons
     *resolvedLanguages = uniqueStrings(resolved);
     return true;
 }
-
-bool PlayerPage::applyBackground(const Background &background)
-{
-    if (!currentCharacter) {
-        return false;
-    }
-
-    QStringList resolvedLanguages;
-    if (!resolveChosenLanguages(background.languages, background.name, currentCharacter->languages, &resolvedLanguages)) {
-        return false;
-    }
-
-    currentCharacter->background = background.name;
-    currentCharacter->backgroundDescription = background.description;
-    currentCharacter->backgroundFeatureName = background.featureName;
-    currentCharacter->backgroundFeatureDescription = background.featureDescription;
-    currentCharacter->skillProficiencies = uniqueStrings(currentCharacter->skillProficiencies + background.skillProficiencies);
-    currentCharacter->toolProficiencies = uniqueStrings(currentCharacter->toolProficiencies + background.toolProficiencies);
-    currentCharacter->languages = uniqueStrings(currentCharacter->languages + resolvedLanguages);
-
-    for (const QString &entry : background.equipment) {
-        addInventoryTextEntry(entry);
-    }
-
-    characterSheet->setCharacter(currentCharacter);
-    return true;
-}
-
-void PlayerPage::chooseCharacterBackground()
-{
-    if (!currentCharacter) {
-        return;
-    }
-
-    const QList<Background> backgrounds = DatabaseManager::instance().getAllBackgrounds();
-    if (backgrounds.isEmpty()) {
-        return;
-    }
-
-    QList<ChoiceEntry> entries;
-    for (const Background &background : backgrounds) {
-        if (background.name.startsWith("Адаптация предысторий", Qt::CaseInsensitive)) {
-            continue;
-        }
-        entries.append({background.name, background.name, backgroundDetailsText(background), background.name == currentCharacter->background});
-    }
-
-    SearchableChoiceDialog dialog(
-        "Выбор предыстории",
-        "Выберите предысторию персонажа. В правой панели отображаются умения, владения и стартовое снаряжение.",
-        entries,
-        false,
-        this);
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
-    const QString selectedBackground = dialog.selectedKey();
-    for (const Background &background : backgrounds) {
-        if (background.name == selectedBackground) {
-            if (!applyBackground(background)) {
-                return;
-            }
-            return;
-        }
-    }
-}
-
-void PlayerPage::applyAbilityIncrease(const QString &abilityName, int amount)
-{
-    if (!currentCharacter || amount <= 0) {
-        return;
-    }
-
-    if (abilityName == "Сила") {
-        currentCharacter->strength = Character::clampAbilityScore(currentCharacter->strength + amount);
-    } else if (abilityName == "Ловкость") {
-        currentCharacter->dexterity = Character::clampAbilityScore(currentCharacter->dexterity + amount);
-    } else if (abilityName == "Телосложение") {
-        currentCharacter->constitution = Character::clampAbilityScore(currentCharacter->constitution + amount);
-    } else if (abilityName == "Интеллект") {
-        currentCharacter->intelligence = Character::clampAbilityScore(currentCharacter->intelligence + amount);
-    } else if (abilityName == "Мудрость") {
-        currentCharacter->wisdom = Character::clampAbilityScore(currentCharacter->wisdom + amount);
-    } else if (abilityName == "Харизма") {
-        currentCharacter->charisma = Character::clampAbilityScore(currentCharacter->charisma + amount);
-    }
-}
-
-bool PlayerPage::chooseAbilityScoreImprovement(const QString &sourceLabel)
-{
-    if (!currentCharacter) {
-        return false;
-    }
-
-    QMessageBox choiceBox(this);
-    choiceBox.setIcon(QMessageBox::Question);
-    choiceBox.setWindowTitle(sourceLabel);
-    choiceBox.setText(QStringLiteral("Выберите формат повышения характеристик для этого слота."));
-    choiceBox.setInformativeText(QStringLiteral("По правилам можно либо повысить одну характеристику на 2, либо две разные на 1."));
-
-    QPushButton *singleAbilityBtn = choiceBox.addButton(QStringLiteral("+2 к одной характеристике"), QMessageBox::AcceptRole);
-    choiceBox.addButton(QStringLiteral("+1 к двум характеристикам"), QMessageBox::AcceptRole);
-    QPushButton *cancelBtn = choiceBox.addButton(QStringLiteral("Отмена"), QMessageBox::RejectRole);
-    choiceBox.exec();
-
-    if (choiceBox.clickedButton() == cancelBtn) {
-        return false;
-    }
-
-    QMap<QString, int> bonuses;
-    const bool pickSingleAbility = choiceBox.clickedButton() == singleAbilityBtn;
-    const bool ok = chooseAbilityIncreaseTargets(
-        this,
-        sourceLabel,
-        pickSingleAbility
-            ? QStringLiteral("Выберите характеристику для бонуса +2.")
-            : QStringLiteral("Выберите две разные характеристики для бонуса +1."),
-        pickSingleAbility ? 1 : 2,
-        pickSingleAbility ? 2 : 1,
-        {},
-        &bonuses);
-
-    if (!ok || bonuses.isEmpty()) {
-        return false;
-    }
-
-    for (auto it = bonuses.begin(); it != bonuses.end(); ++it) {
-        applyAbilityIncrease(it.key(), it.value());
-    }
-
-    currentCharacter->abilityScoreImprovementLog << QStringLiteral("%1: %2")
-        .arg(sourceLabel, formatAbilityIncreaseSummary(bonuses));
-    currentCharacter->recalculateDerivedStats(false);
-    return true;
-}
-
-void PlayerPage::applyFeat(const Feat &feat)
-{
-    if (!currentCharacter) {
-        return;
-    }
-
-    if (!currentCharacter->featNames.contains(feat.name)) {
-        currentCharacter->featNames << feat.name;
-    }
-
-    QString summary = feat.description;
-    if (!feat.benefits.isEmpty()) {
-        if (!summary.isEmpty()) {
-            summary += "\n\n";
-        }
-        summary += feat.benefits.join("\n");
-    }
-    currentCharacter->featDescriptions.insert(feat.name, summary);
-
-    int increaseAmount = 0;
-    QStringList candidateAbilities;
-    const QString abilityText = feat.benefits.join(" ");
-    const QRegularExpression amountRegex(QStringLiteral("на\\s*(\\d+)"), QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch match = amountRegex.match(abilityText);
-    if (match.hasMatch()) {
-        increaseAmount = match.captured(1).toInt();
-    }
-
-    const QStringList allAbilities = {"Сила", "Ловкость", "Телосложение", "Интеллект", "Мудрость", "Харизма"};
-    for (const QString &ability : allAbilities) {
-        if (abilityText.contains(ability, Qt::CaseInsensitive)) {
-            candidateAbilities << ability;
-        }
-    }
-
-    if (increaseAmount > 0) {
-        if (candidateAbilities.isEmpty() && abilityText.contains("по вашему выбору", Qt::CaseInsensitive)) {
-            candidateAbilities = allAbilities;
-        }
-
-        candidateAbilities = uniqueStrings(candidateAbilities);
-        if (!candidateAbilities.isEmpty()) {
-            QString selectedAbility;
-            if (candidateAbilities.size() == 1) {
-                selectedAbility = candidateAbilities.first();
-            } else {
-                bool ok = false;
-                selectedAbility = QInputDialog::getItem(
-                    this,
-                    QString("Черта: %1").arg(feat.name),
-                    QString("Выберите характеристику для бонуса +%1:").arg(increaseAmount),
-                    candidateAbilities,
-                    0,
-                    false,
-                    &ok);
-                if (!ok) {
-                    selectedAbility.clear();
-                }
-            }
-
-            if (!selectedAbility.isEmpty()) {
-                applyAbilityIncrease(selectedAbility, increaseAmount);
-            }
-        }
-    }
-}
-
-bool PlayerPage::chooseStartingFeats()
-{
-    if (!currentCharacter) {
-        return false;
-    }
-
-    const QString rulesError = CharacterProgressionRules::instance().loadError();
-    if (!rulesError.isEmpty()) {
-        QMessageBox::warning(this, "Правила прогрессии", rulesError);
-        return false;
-    }
-
-    const int availableFeatSlots = totalFeatSlots(selectedClassLevels);
-    if (availableFeatSlots <= 0) {
-        return true;
-    }
-
-    const QList<Feat> feats = DatabaseManager::instance().getAllFeats();
-    if (feats.isEmpty()) {
-        return true;
-    }
-
-    int slotIndex = spentAdvancementSlots(currentCharacter);
-    while (slotIndex < availableFeatSlots) {
-        const QString slotLabel = advancementChoiceLabel(slotIndex + 1);
-
-        QMessageBox choiceBox(this);
-        choiceBox.setIcon(QMessageBox::Question);
-        choiceBox.setWindowTitle(slotLabel);
-        choiceBox.setText(QStringLiteral("Выберите, как использовать этот слот развития."));
-        choiceBox.setInformativeText(QStringLiteral("Доступны два варианта: взять черту или выполнить повышение характеристик."));
-
-        choiceBox.addButton(QStringLiteral("Взять черту"), QMessageBox::AcceptRole);
-        QPushButton *asiBtn = choiceBox.addButton(QStringLiteral("Повысить характеристики"), QMessageBox::AcceptRole);
-        QPushButton *cancelBtn = choiceBox.addButton(QStringLiteral("Отмена"), QMessageBox::RejectRole);
-        choiceBox.exec();
-
-        if (choiceBox.clickedButton() == cancelBtn) {
-            return false;
-        }
-
-        if (choiceBox.clickedButton() == asiBtn) {
-            if (!chooseAbilityScoreImprovement(slotLabel)) {
-                return false;
-            }
-            ++slotIndex;
-            continue;
-        }
-
-        QList<Feat> eligibleFeats;
-        for (const Feat &feat : feats) {
-            if (featSatisfiesPrerequisite(feat, currentCharacter, selectedClassLevels, currentCharacter->featNames, true)) {
-                eligibleFeats.append(feat);
-            }
-        }
-
-        if (eligibleFeats.isEmpty()) {
-            QMessageBox::information(
-                this,
-                slotLabel,
-                QStringLiteral("Для этого слота нет доступных черт по prerequisite. Выберите повышение характеристик."));
-            if (!chooseAbilityScoreImprovement(slotLabel)) {
-                return false;
-            }
-            ++slotIndex;
-            continue;
-        }
-
-        QList<ChoiceEntry> entries;
-        for (const Feat &feat : eligibleFeats) {
-            entries.append({feat.name, feat.name, featDetailsText(feat), false});
-        }
-
-        SearchableChoiceDialog dialog(
-            slotLabel,
-            QStringLiteral("Выберите одну черту для этого слота. Недоступные по prerequisite варианты скрыты."),
-            entries,
-            false,
-            this);
-
-        if (dialog.exec() != QDialog::Accepted) {
-            return false;
-        }
-
-        const QString selectedFeatName = dialog.selectedKey().trimmed();
-        if (selectedFeatName.isEmpty()) {
-            QMessageBox::warning(this, slotLabel, QStringLiteral("Нужно выбрать черту или вернуться к выбору ASI."));
-            continue;
-        }
-
-        for (const Feat &feat : eligibleFeats) {
-            if (feat.name == selectedFeatName &&
-                !featSatisfiesPrerequisite(feat, currentCharacter, selectedClassLevels, currentCharacter->featNames + QStringList{selectedFeatName}, false)) {
-                QMessageBox::warning(
-                    this,
-                    "Требования к черте",
-                    QString("Черта «%1» не проходит prerequisite: %2")
-                        .arg(feat.name, feat.prerequisite.isEmpty() ? QStringLiteral("требование не выполнено") : feat.prerequisite));
-                break;
-            }
-
-            if (feat.name == selectedFeatName) {
-                applyFeat(feat);
-                currentCharacter->recalculateDerivedStats(false);
-                ++slotIndex;
-                break;
-            }
-        }
-    }
-
-    return true;
-}
-
-bool PlayerPage::chooseSubclassForClass(Class *cls, int classLevel)
+bool CharacterCreationService::chooseSubclassForClass(Class *cls, int classLevel)
 {
     if (!cls || cls->subclasses.isEmpty()) {
         return true;
@@ -3927,7 +3367,7 @@ bool PlayerPage::chooseSubclassForClass(Class *cls, int classLevel)
             .arg(choiceLevel),
         entries,
         false,
-        this,
+        m_parentWidget,
         -1,
         QString(),
         QStringLiteral("Все подклассы"));
@@ -3939,7 +3379,7 @@ bool PlayerPage::chooseSubclassForClass(Class *cls, int classLevel)
     const QString selectedName = dialog.selectedKey().trimmed();
     if (!subclassNameExists(*cls, selectedName)) {
         QMessageBox::warning(
-            this,
+            m_parentWidget,
             QStringLiteral("Выбор подкласса"),
             QStringLiteral("Нужно выбрать один подкласс для класса «%1».").arg(cls->name));
         return false;
@@ -3948,95 +3388,16 @@ bool PlayerPage::chooseSubclassForClass(Class *cls, int classLevel)
     cls->selectedSubclassName = selectedName;
     return true;
 }
-
-void PlayerPage::addInventoryItem(const Item &item)
+void CharacterCreationService::chooseStartingSpells()
 {
-    if (!currentCharacter || item.name.trimmed().isEmpty()) {
-        return;
-    }
-
-    for (Item &existing : currentCharacter->inventory) {
-        if (existing.name.compare(item.name, Qt::CaseInsensitive) == 0) {
-            existing.quantity += qMax(1, item.quantity);
-            return;
-        }
-    }
-
-    currentCharacter->inventory.append(item);
-}
-
-void PlayerPage::addInventoryTextEntry(const QString &entry)
-{
-    if (!currentCharacter || entry.trimmed().isEmpty()) {
-        return;
-    }
-
-    Item item;
-    item.name = entry.trimmed();
-    item.description = QStringLiteral("Стартовое снаряжение");
-    addInventoryItem(item);
-}
-
-void PlayerPage::chooseStartingEquipment()
-{
-    if (!currentCharacter) {
-        return;
-    }
-
-    const QList<Item> items = DatabaseManager::instance().getAllItems();
-    if (items.isEmpty()) {
-        return;
-    }
-
-    QList<ChoiceEntry> entries;
-    for (const Item &item : items) {
-        bool alreadySelected = false;
-        for (const Item &existing : currentCharacter->inventory) {
-            if (existing.name.compare(item.name, Qt::CaseInsensitive) == 0) {
-                alreadySelected = true;
-                break;
-            }
-        }
-        entries.append({item.name, item.name, itemDetailsText(item), alreadySelected});
-    }
-
-    SearchableChoiceDialog dialog(
-        "Стартовое снаряжение",
-        "Снаряжение предыстории уже добавлено автоматически. При необходимости отметьте дополнительные предметы из базы.",
-        entries,
-        true,
-        this);
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
-    const QStringList selectedItemNames = dialog.selectedKeys();
-    QList<Item> retainedInventory;
-    for (const Item &existing : currentCharacter->inventory) {
-        if (existing.description == QStringLiteral("Стартовое снаряжение") && existing.type.isEmpty()) {
-            retainedInventory.append(existing);
-        }
-    }
-    currentCharacter->inventory = retainedInventory;
-
-    for (const Item &item : items) {
-        if (selectedItemNames.contains(item.name)) {
-            addInventoryItem(item);
-        }
-    }
-}
-
-void PlayerPage::chooseStartingSpells()
-{
-    if (!currentCharacter) {
+    if (!m_character) {
         return;
     }
 
     const CharacterProgressionRules &rules = CharacterProgressionRules::instance();
     const QString rulesError = rules.loadError();
     if (!rulesError.isEmpty()) {
-        QMessageBox::warning(this, "Правила прогрессии", rulesError);
+        QMessageBox::warning(m_parentWidget, "Правила прогрессии", rulesError);
         return;
     }
 
@@ -4051,9 +3412,9 @@ void PlayerPage::chooseStartingSpells()
     }
 
     QList<ClassSpellSelection> spellSelections;
-    for (const QString &className : classSelectionOrder) {
-        const int classLevel = selectedClassLevels.value(className, 0);
-        const SpellSelectionRule rule = rules.spellSelectionRuleForClass(currentCharacter, className, classLevel);
+    for (const QString &className : m_classSelectionOrder) {
+        const int classLevel = m_selectedClassLevels.value(className, 0);
+        const SpellSelectionRule rule = rules.spellSelectionRuleForClass(m_character, className, classLevel);
         if (!rule.isValid()) {
             continue;
         }
@@ -4070,14 +3431,14 @@ void PlayerPage::chooseStartingSpells()
         }
     }
 
-    const QList<Spell> preservedRaceSpells = filterRaceGrantedSpells(currentCharacter->spells);
-    const QList<Spell> preservedRaceSpellbook = filterRaceGrantedSpells(currentCharacter->spellbook);
+    const QList<Spell> preservedRaceSpells = filterRaceGrantedSpells(m_character->spells);
+    const QList<Spell> preservedRaceSpellbook = filterRaceGrantedSpells(m_character->spellbook);
     QList<Spell> rebuiltPreparedSpells = preservedRaceSpells;
     QList<Spell> rebuiltSpellbook = preservedRaceSpellbook;
 
-    for (const QString &className : classSelectionOrder) {
-        const Class cls = selectedClasses.value(className);
-        const int classLevel = selectedClassLevels.value(className, 0);
+    for (const QString &className : m_classSelectionOrder) {
+        const Class cls = m_selectedClasses.value(className);
+        const int classLevel = m_selectedClassLevels.value(className, 0);
         const QStringList grantedSpellNames = subclassSpellNames(cls, classLevel);
         if (grantedSpellNames.isEmpty()) {
             continue;
@@ -4099,14 +3460,14 @@ void PlayerPage::chooseStartingSpells()
     }
 
     if (spellSelections.isEmpty()) {
-        currentCharacter->spells = uniqueSpells(rebuiltPreparedSpells);
-        currentCharacter->spellbook = uniqueSpells(rebuiltSpellbook);
+        m_character->spells = uniqueSpells(rebuiltPreparedSpells);
+        m_character->spellbook = uniqueSpells(rebuiltSpellbook);
         return;
     }
 
     const bool singleCastingClass = spellSelections.size() == 1;
-    const QList<Spell> previousPreparedSpells = removeGrantedSpells(currentCharacter->spells);
-    const QList<Spell> previousSpellbook = removeGrantedSpells(currentCharacter->spellbook);
+    const QList<Spell> previousPreparedSpells = removeGrantedSpells(m_character->spells);
+    const QList<Spell> previousSpellbook = removeGrantedSpells(m_character->spellbook);
 
     for (const ClassSpellSelection &selection : spellSelections) {
         QList<Spell> sortedCandidates = selection.candidates;
@@ -4193,7 +3554,7 @@ void PlayerPage::chooseStartingSpells()
                         .arg(selection.rule.className),
                     cantripEntries,
                     true,
-                    this,
+                    m_parentWidget,
                     selection.rule.cantripLimit,
                     QString("Для класса «%1» нельзя выбрать больше %2 заговоров.")
                         .arg(selection.rule.className)
@@ -4207,7 +3568,7 @@ void PlayerPage::chooseStartingSpells()
                 selectedCantripNames = cantripDialog.selectedKeys();
                 if (selection.rule.cantripLimit > 0 && selectedCantripNames.size() != selection.rule.cantripLimit) {
                     QMessageBox::warning(
-                        this,
+                        m_parentWidget,
                         "Количество заговоров",
                         QString("Для класса «%1» нужно выбрать ровно %2 заговоров. Сейчас выбрано %3.")
                             .arg(selection.rule.className)
@@ -4238,7 +3599,7 @@ void PlayerPage::chooseStartingSpells()
                 promptLines.join("\n"),
                 entries,
                 true,
-                this,
+                m_parentWidget,
                 selection.rule.leveledLimit,
                 QString("Для класса «%1» нельзя выбрать больше %2 %3.")
                     .arg(selection.rule.className)
@@ -4267,7 +3628,7 @@ void PlayerPage::chooseStartingSpells()
 
             if (selection.rule.exactLeveledLimit && selectedLeveled != selection.rule.leveledLimit) {
                 QMessageBox::warning(
-                    this,
+                    m_parentWidget,
                     "Количество заклинаний",
                     QString("Для класса «%1» нужно выбрать ровно %2 %3. Сейчас выбрано %4.")
                         .arg(selection.rule.className)
@@ -4279,7 +3640,7 @@ void PlayerPage::chooseStartingSpells()
 
             if (!selection.rule.exactLeveledLimit && selectedLeveled > selection.rule.leveledLimit) {
                 QMessageBox::warning(
-                    this,
+                    m_parentWidget,
                     "Слишком много заклинаний",
                     QString("Для класса «%1» можно выбрать не более %2 %3. Сейчас выбрано %4.")
                         .arg(selection.rule.className)
@@ -4293,7 +3654,7 @@ void PlayerPage::chooseStartingSpells()
             for (auto it = selection.rule.perSpellLevelCaps.begin(); it != selection.rule.perSpellLevelCaps.end(); ++it) {
                 if (selectedByLevel.value(it.key(), 0) > it.value()) {
                     QMessageBox::warning(
-                        this,
+                        m_parentWidget,
                         "Ограничение по кругу заклинаний",
                         QString("Для класса «%1» можно выбрать не более %2 заклинаний %3 круга.")
                             .arg(selection.rule.className)
@@ -4358,7 +3719,7 @@ void PlayerPage::chooseStartingSpells()
                         .arg(selection.rule.preparedLabel),
                     entries,
                     true,
-                    this,
+                    m_parentWidget,
                     selection.rule.preparedLimit,
                     QString("Для класса «%1» нельзя выбрать больше %2 %3.")
                         .arg(selection.rule.className)
@@ -4373,7 +3734,7 @@ void PlayerPage::chooseStartingSpells()
                 preparedNames = dialog.selectedKeys();
                 if (selection.rule.exactPreparedLimit && preparedNames.size() != selection.rule.preparedLimit) {
                     QMessageBox::warning(
-                        this,
+                        m_parentWidget,
                         "Количество подготовленных заклинаний",
                         QString("Для класса «%1» нужно выбрать ровно %2 %3.")
                             .arg(selection.rule.className)
@@ -4384,7 +3745,7 @@ void PlayerPage::chooseStartingSpells()
 
                 if (!selection.rule.exactPreparedLimit && preparedNames.size() > selection.rule.preparedLimit) {
                     QMessageBox::warning(
-                        this,
+                        m_parentWidget,
                         "Слишком много подготовленных заклинаний",
                         QString("Для класса «%1» можно подготовить не более %2 %3.")
                             .arg(selection.rule.className)
@@ -4413,177 +3774,53 @@ void PlayerPage::chooseStartingSpells()
         }
     }
 
-    currentCharacter->spells = uniqueSpells(rebuiltPreparedSpells);
-    currentCharacter->spellbook = uniqueSpells(rebuiltSpellbook);
+    m_character->spells = uniqueSpells(rebuiltPreparedSpells);
+    m_character->spellbook = uniqueSpells(rebuiltSpellbook);
 }
-
-void PlayerPage::completeCharacterCreation()
+void CharacterCreationService::synchronizeCharacterFromClasses(bool refillCurrentHp)
 {
-    if (!currentCharacter) {
+    if (!m_character) {
         return;
     }
 
-    const int previousMaxHp = levelUpInProgress ? levelUpPreviousMaxHp : currentCharacter->maxHp;
-    Race raceSnapshot;
-    raceSnapshot.name = currentCharacter->race();
-    raceSnapshot.traits = currentCharacter->traits;
+    m_character->classLevels = m_selectedClassLevels;
+    m_character->classOrder = m_classSelectionOrder;
+    m_character->subclassSelections = m_selectedSubclassNames;
+    m_character->classSkillSelections = m_selectedClassSkillSelections;
+    m_character->classFeatureChoices = m_selectedClassFeatureChoices;
+    m_character->classHitDice.clear();
+    m_character->savingThrowProficiencies.clear();
+    m_character->armorProficiencies.clear();
+    m_character->weaponProficiencies.clear();
 
-    if (!levelUpInProgress) {
-        chooseCharacterBackground();
-        if (!chooseStartingFeats()) {
-            return;
-        }
-        chooseStartingEquipment();
-    } else if (totalFeatSlots(selectedClassLevels) > levelUpPreviousFeatSlots) {
-        if (!chooseStartingFeats()) {
-            cancelPendingLevelUp(true);
-            showCharacterInfo();
-            return;
-        }
-    }
-
-    chooseStartingSpells();
-    currentCharacter->recalculateDerivedStats(false);
-    applyRaceDerivedBenefits(raceSnapshot);
-
-    if (levelUpInProgress) {
-        const int gainedHp = qMax(0, currentCharacter->maxHp - previousMaxHp);
-        currentCharacter->currentHp = qMin(currentCharacter->maxHp, currentCharacter->currentHp + gainedHp);
-    }
-
-    characterSheet->setCharacter(currentCharacter);
-    showCharacterInfo();
-    saveCurrentCharacter();
-
-    const bool completedLevelUp = levelUpInProgress;
-    cancelPendingLevelUp();
-
-    if (completedLevelUp) {
-        QMessageBox::information(
-            this,
-            QStringLiteral("Уровень повышен"),
-            QStringLiteral("Персонаж повышен до %1 уровня. Текущее значение HP обновлено с учётом прироста максимума.")
-                .arg(currentCharacter->level));
-        return;
-    }
-
-    QString completionMessage = QString(
-        "Создание персонажа завершено.\n\nПредыстория: %1\nЧерт выбрано: %2\nПредметов в инвентаре: %3\nЗаклинаний выбрано: %4")
-            .arg(currentCharacter->background.isEmpty() ? QStringLiteral("не выбрана") : currentCharacter->background)
-            .arg(currentCharacter->featNames.size())
-            .arg(currentCharacter->inventory.size())
-            .arg(currentCharacter->spells.size());
-    if (!currentCharacter->spellbook.isEmpty()) {
-        completionMessage += QString("\nЗаписано в книгу заклинаний: %1").arg(currentCharacter->spellbook.size());
-    }
-
-    QMessageBox::information(this, "Персонаж создан", completionMessage);
-}
-
-void PlayerPage::onRaceChosen(const Race &race)
-{
-    if (!currentCharacter) {
-        return;
-    }
-
-    resetClassSelection();
-    applyBaseAbilityScores();
-
-    Race resolvedRace = race;
-    if (!applyRaceTraitChoices(this, race, currentCharacter->level, &resolvedRace)) {
-        return;
-    }
-
-    currentCharacter->setRace(resolvedRace.name);
-    currentCharacter->size = resolvedRace.size;
-    currentCharacter->speed = resolvedRace.speed;
-    currentCharacter->flyingSpeed = resolvedRace.flyingSpeed;
-
-    QStringList resolvedRaceLanguages;
-    if (!resolveChosenLanguages(raceLanguageEntriesForSelection(resolvedRace), resolvedRace.name, {}, &resolvedRaceLanguages)) {
-        return;
-    }
-
-    if (!applyRaceAbilityBonuses(resolvedRace)) {
-        return;
-    }
-
-    currentCharacter->languages = resolvedRaceLanguages;
-
-    if (!chooseRaceGrantedSpells(resolvedRace)) {
-        return;
-    }
-
-    currentCharacter->traits = filteredRaceTraits(resolvedRace.traits);
-    const QStringList baseSkills = currentCharacter->skillProficiencies;
-    const QStringList baseTools = currentCharacter->toolProficiencies;
-    const QStringList baseArmor = currentCharacter->armorProficiencies;
-    const QStringList baseWeapons = currentCharacter->weaponProficiencies;
-    applyRaceDerivedBenefits(resolvedRace);
-
-    if (!applyRaceChoiceBenefits(this, resolvedRace, currentCharacter, baseSkills, baseTools, baseArmor, baseWeapons)) {
-        currentCharacter->skillProficiencies = baseSkills;
-        currentCharacter->toolProficiencies = baseTools;
-        currentCharacter->armorProficiencies = baseArmor;
-        currentCharacter->weaponProficiencies = baseWeapons;
-        return;
-    }
-
-    currentCharacter->recalculateDerivedStats(false);
-
-    qDebug() << "Character Race Selected:" << race.name;
-    qDebug() << "New Stats: Str" << currentCharacter->strength << "Dex" << currentCharacter->dexterity
-             << "Con" << currentCharacter->constitution << "Int" << currentCharacter->intelligence
-             << "Wis" << currentCharacter->wisdom << "Cha" << currentCharacter->charisma;
-
-    charStack->setCurrentIndex(2);
-    classPage->showList();
-}
-
-void PlayerPage::synchronizeCharacterFromClasses(bool refillCurrentHp)
-{
-    if (!currentCharacter) {
-        return;
-    }
-
-    currentCharacter->classLevels = selectedClassLevels;
-    currentCharacter->classOrder = classSelectionOrder;
-    currentCharacter->subclassSelections = selectedSubclassNames;
-    currentCharacter->classSkillSelections = selectedClassSkillSelections;
-    currentCharacter->classFeatureChoices = selectedClassFeatureChoices;
-    currentCharacter->classHitDice.clear();
-    currentCharacter->savingThrowProficiencies.clear();
-    currentCharacter->armorProficiencies.clear();
-    currentCharacter->weaponProficiencies.clear();
-
-    const int projectedLevel = qMax(1, sumLevels(selectedClassLevels) > 0 ? sumLevels(selectedClassLevels) : targetCharacterLevel);
-    const QMap<QString, QString> characterRaceTraits = normalizedRaceTraits(currentCharacter->traits);
+    const int projectedLevel = qMax(1, sumLevels(m_selectedClassLevels) > 0 ? sumLevels(m_selectedClassLevels) : m_targetLevel);
+    const QMap<QString, QString> characterRaceTraits = normalizedRaceTraits(m_character->traits);
     QStringList armorProficiencies = racialArmorProficiencies(characterRaceTraits, projectedLevel);
     QStringList weaponProficiencies = racialWeaponProficiencies(characterRaceTraits, projectedLevel);
-    QStringList toolProficiencies = currentCharacter->toolProficiencies;
-    QStringList skillProficiencies = currentCharacter->skillProficiencies;
-    for (auto it = selectedClassSkillSelections.begin(); it != selectedClassSkillSelections.end(); ++it) {
+    QStringList toolProficiencies = m_character->toolProficiencies;
+    QStringList skillProficiencies = m_character->skillProficiencies;
+    for (auto it = m_selectedClassSkillSelections.begin(); it != m_selectedClassSkillSelections.end(); ++it) {
         for (const QString &skill : it.value()) {
             skillProficiencies.removeAll(skill);
         }
     }
     bool firstClass = true;
 
-    for (const QString &className : classSelectionOrder) {
-        if (!selectedClasses.contains(className)) {
+    for (const QString &className : m_classSelectionOrder) {
+        if (!m_selectedClasses.contains(className)) {
             continue;
         }
 
-        const Class cls = selectedClasses.value(className);
-        const int classLevel = selectedClassLevels.value(className, 0);
+        const Class cls = m_selectedClasses.value(className);
+        const int classLevel = m_selectedClassLevels.value(className, 0);
         if (classLevel <= 0) {
             continue;
         }
 
-        currentCharacter->classHitDice.insert(className, cls.hitDie);
+        m_character->classHitDice.insert(className, cls.hitDie);
         if (firstClass) {
-            currentCharacter->hitDie = cls.hitDie;
-            currentCharacter->savingThrowProficiencies = cls.savingThrowProficiencies;
+            m_character->hitDie = cls.hitDie;
+            m_character->savingThrowProficiencies = cls.savingThrowProficiencies;
             firstClass = false;
         }
 
@@ -4593,159 +3830,588 @@ void PlayerPage::synchronizeCharacterFromClasses(bool refillCurrentHp)
         weaponProficiencies.append(subclassWeaponProficiencies(cls, classLevel));
         toolProficiencies.append(subclassToolProficiencies(cls, classLevel));
         skillProficiencies.append(subclassSkillProficiencies(cls, classLevel));
-        skillProficiencies.append(selectedClassSkillSelections.value(className));
+        skillProficiencies.append(m_selectedClassSkillSelections.value(className));
     }
 
     if (firstClass) {
-        currentCharacter->hitDie = 0;
+        m_character->hitDie = 0;
     }
 
-    currentCharacter->armorProficiencies = uniqueStrings(armorProficiencies);
-    currentCharacter->weaponProficiencies = uniqueStrings(weaponProficiencies);
-    currentCharacter->toolProficiencies = uniqueStrings(toolProficiencies);
-    currentCharacter->skillProficiencies = uniqueStrings(skillProficiencies);
+    m_character->armorProficiencies = uniqueStrings(armorProficiencies);
+    m_character->weaponProficiencies = uniqueStrings(weaponProficiencies);
+    m_character->toolProficiencies = uniqueStrings(toolProficiencies);
+    m_character->skillProficiencies = uniqueStrings(skillProficiencies);
 
-    allocatedClassLevels = sumLevels(selectedClassLevels);
-    currentCharacter->level = qMax(1, allocatedClassLevels > 0 ? allocatedClassLevels : targetCharacterLevel);
+    m_allocatedClassLevels = sumLevels(m_selectedClassLevels);
+    m_character->level = qMax(1, m_allocatedClassLevels > 0 ? m_allocatedClassLevels : m_targetLevel);
     updateCharacterClassSummary();
-    currentCharacter->recalculateDerivedStats(refillCurrentHp);
+    m_character->recalculateDerivedStats(refillCurrentHp);
 }
 
-void PlayerPage::saveCurrentCharacter()
+bool CharacterCreationService::runCreationWizard()
 {
-    if (!currentCharacter || currentCampaign.isEmpty()) {
-        return;
+    if (!m_character || !m_parentWidget) {
+        return false;
     }
 
-    DatabaseManager::instance().saveCharacter(currentCampaign, *currentCharacter);
+    if (!runAbilityScoreStep()) {
+        return false;
+    }
+    if (!runRaceStep()) {
+        return false;
+    }
+    if (!runClassStep()) {
+        return false;
+    }
+    if (!runBackgroundAndEquipmentStep()) {
+        return false;
+    }
+    if (!runSpellsStep()) {
+        return false;
+    }
+
+    return true;
 }
 
-void PlayerPage::loadCharacterForCurrentCampaign()
+bool CharacterCreationService::runAbilityScoreStep()
 {
-    characterSheet->setCharacter(nullptr);
-
-    if (currentCharacter) {
-        delete currentCharacter;
-        currentCharacter = nullptr;
+    if (!m_character || !m_parentWidget) {
+        return false;
     }
 
-    resetCreationProgress();
-
-    if (currentCampaign.isEmpty()) {
-        charStack->setCurrentIndex(0);
-        return;
+    resetClassSelection();
+    if (!chooseBaseAbilityScores()) {
+        return false;
     }
 
-    Character *loadedCharacter = new Character(this);
-    if (!DatabaseManager::instance().loadCharacter(currentCampaign, loadedCharacter)) {
-        delete loadedCharacter;
-        charStack->setCurrentIndex(0);
-        return;
-    }
-
-    currentCharacter = loadedCharacter;
-    Race raceSnapshot;
-    raceSnapshot.name = currentCharacter->race();
-    raceSnapshot.traits = currentCharacter->traits;
-    applyRaceDerivedBenefits(raceSnapshot);
-    targetCharacterLevel = currentCharacter->level;
-    prepareSelectedClassesFromCharacter();
-    characterSheet->setCharacter(currentCharacter);
-    charStack->setCurrentIndex(0);
+    applyBaseAbilityScores();
+    m_character->recalculateDerivedStats(false);
+    return true;
 }
 
-void PlayerPage::onClassChosen(const Class &cls)
+bool CharacterCreationService::runRaceStep()
 {
-    if (!currentCharacter) return;
-
-    int remaining = remainingLevelsToAllocate();
-    if (remaining <= 0) {
-        showCharacterInfo();
-        return;
+    if (!m_character || !m_parentWidget) {
+        return false;
     }
 
-    if (levelUpInProgress && levelUpChoosingMulticlass) {
-        if (selectedClassLevels.contains(cls.name)) {
-            QMessageBox::warning(
-                this,
-                QStringLiteral("Мультикласс"),
-                QStringLiteral("Класс «%1» уже есть у персонажа. Чтобы повысить его уровень, выберите «Повысить последний класс».")
-                    .arg(cls.name));
-            return;
-        }
-
-        if (!applyClassLevelChange(cls, 1)) {
-            return;
-        }
-
-        completeCharacterCreation();
-        return;
+    Race race;
+    if (!showRacePicker(&race)) {
+        return false;
     }
 
-    bool ok = false;
-    QString prompt = QString("Класс: %1\nВыберите уровень этого класса (1-%2):")
-                         .arg(cls.name)
-                         .arg(remaining);
-    int classLevel = QInputDialog::getInt(
-        this,
-        "Уровень класса",
-        prompt,
-        1,
-        1,
-        remaining,
-        1,
-        &ok);
+    return applyRaceSelection(race);
+}
 
-    if (!ok) {
-        return;
+bool CharacterCreationService::runClassStep()
+{
+    return runClassSelectionFlow();
+}
+
+bool CharacterCreationService::runBackgroundAndEquipmentStep()
+{
+    if (!m_character || !m_parentWidget) {
+        return false;
     }
 
-    if (!applyClassLevelChange(cls, classLevel)) {
-        return;
+    chooseCharacterBackground();
+    if (!chooseStartingFeats()) {
+        return false;
+    }
+    chooseStartingEquipment();
+    return true;
+}
+
+bool CharacterCreationService::runSpellsStep()
+{
+    return finalizeCreation(true);
+}
+
+bool CharacterCreationService::runClassSelectionFlow()
+{
+    if (!m_character || !m_parentWidget) {
+        return false;
     }
 
-    qDebug() << "Character Class Selected:" << cls.name << "Level:" << classLevel;
-
-    remaining = remainingLevelsToAllocate();
-    if (remaining > 0 && !levelUpInProgress) {
-        QMessageBox choiceBox(this);
-        choiceBox.setIcon(QMessageBox::Question);
-        choiceBox.setWindowTitle("Распределение уровней");
-        choiceBox.setText(QString("Текущий уровень персонажа: %1 из %2.\n"
-                                  "Осталось распределить: %3.")
-                              .arg(allocatedClassLevels)
-                              .arg(targetCharacterLevel)
-                              .arg(remaining));
-        choiceBox.setInformativeText("Выберите: добавить ещё класс (мультикласс) или докачать текущий класс.");
-
-        QPushButton *multiclassBtn = choiceBox.addButton("Мультикласс", QMessageBox::AcceptRole);
-        QPushButton *fillCurrentBtn = choiceBox.addButton("Докачать текущий класс", QMessageBox::DestructiveRole);
-        QPushButton *cancelBtn = choiceBox.addButton("Отмена", QMessageBox::RejectRole);
-        choiceBox.exec();
-
-        if (choiceBox.clickedButton() == multiclassBtn) {
-            classPage->clearClassFilters();
-            charStack->setCurrentIndex(2);
-            classPage->showList();
-            return;
+    while (remainingLevelsToAllocate() > 0) {
+        Class cls;
+        if (!showClassPicker(&cls)) {
+            return false;
         }
 
-        if (choiceBox.clickedButton() == cancelBtn) {
-            charStack->setCurrentIndex(2);
-            classPage->showList();
-            return;
+        int remaining = remainingLevelsToAllocate();
+        if (remaining <= 0) {
+            break;
         }
 
-        if (choiceBox.clickedButton() == fillCurrentBtn) {
-            Class classSnapshot = selectedClasses.value(cls.name, cls);
-            if (!applyClassLevelChange(classSnapshot, remaining)) {
-                return;
+        if (m_levelUpInProgress && m_levelUpChoosingMulticlass) {
+            if (m_selectedClassLevels.contains(cls.name)) {
+                QMessageBox::warning(
+                    m_parentWidget,
+                    QStringLiteral("Мультикласс"),
+                    QStringLiteral("Класс «%1» уже есть у персонажа. Чтобы повысить его уровень, выберите «Повысить последний класс».")
+                        .arg(cls.name));
+                continue;
+            }
+
+            if (!applyClassLevelChange(cls, 1)) {
+                return false;
+            }
+            break;
+        }
+
+        bool ok = false;
+        const QString prompt = QStringLiteral("Класс: %1\nВыберите уровень этого класса (1-%2):")
+                                   .arg(cls.name)
+                                   .arg(remaining);
+        const int classLevel = QInputDialog::getInt(
+            m_parentWidget,
+            QStringLiteral("Уровень класса"),
+            prompt,
+            1,
+            1,
+            remaining,
+            1,
+            &ok);
+
+        if (!ok) {
+            return false;
+        }
+
+        if (!applyClassLevelChange(cls, classLevel)) {
+            return false;
+        }
+
+        remaining = remainingLevelsToAllocate();
+        if (remaining > 0 && !m_levelUpInProgress) {
+            QMessageBox choiceBox(m_parentWidget);
+            choiceBox.setIcon(QMessageBox::Question);
+            choiceBox.setWindowTitle(QStringLiteral("Распределение уровней"));
+            choiceBox.setText(QStringLiteral("Текущий уровень персонажа: %1 из %2.\n"
+                                               "Осталось распределить: %3.")
+                                  .arg(m_allocatedClassLevels)
+                                  .arg(m_targetLevel)
+                                  .arg(remaining));
+            choiceBox.setInformativeText(QStringLiteral("Выберите: добавить ещё класс (мультикласс) или докачать текущий класс."));
+
+            QPushButton *multiclassBtn = choiceBox.addButton(QStringLiteral("Мультикласс"), QMessageBox::AcceptRole);
+            QPushButton *fillCurrentBtn = choiceBox.addButton(QStringLiteral("Докачать текущий класс"), QMessageBox::DestructiveRole);
+            QPushButton *cancelBtn = choiceBox.addButton(QStringLiteral("Отмена"), QMessageBox::RejectRole);
+            choiceBox.exec();
+
+            if (choiceBox.clickedButton() == multiclassBtn) {
+                continue;
+            }
+
+            if (choiceBox.clickedButton() == cancelBtn) {
+                return false;
+            }
+
+            if (choiceBox.clickedButton() == fillCurrentBtn) {
+                const Class classSnapshot = m_selectedClasses.value(cls.name, cls);
+                if (!applyClassLevelChange(classSnapshot, remaining)) {
+                    return false;
+                }
             }
         }
     }
 
-    completeCharacterCreation();
+    return remainingLevelsToAllocate() == 0;
 }
 
+bool CharacterCreationService::finalizeCreation(bool includeSpells)
+{
+    if (!m_character) {
+        return false;
+    }
 
+    Race raceSnapshot;
+    raceSnapshot.name = m_character->race();
+    raceSnapshot.traits = m_character->traits;
 
+    if (includeSpells) {
+        chooseStartingSpells();
+    }
+
+    m_character->recalculateDerivedStats(false);
+    applyRaceDerivedBenefits(raceSnapshot);
+    return true;
+}
+
+bool CharacterCreationService::applyBackground(const Background &background)
+{
+    if (!m_character) {
+        return false;
+    }
+
+    QStringList resolvedLanguages;
+    if (!resolveChosenLanguages(background.languages, background.name, m_character->languages, &resolvedLanguages)) {
+        return false;
+    }
+
+    m_character->background = background.name;
+    m_character->backgroundDescription = background.description;
+    m_character->backgroundFeatureName = background.featureName;
+    m_character->backgroundFeatureDescription = background.featureDescription;
+    m_character->skillProficiencies = uniqueStrings(m_character->skillProficiencies + background.skillProficiencies);
+    m_character->toolProficiencies = uniqueStrings(m_character->toolProficiencies + background.toolProficiencies);
+    m_character->languages = uniqueStrings(m_character->languages + resolvedLanguages);
+
+    for (const QString &entry : background.equipment) {
+        addInventoryTextEntry(entry);
+    }
+
+    return true;
+}
+
+void CharacterCreationService::chooseCharacterBackground()
+{
+    if (!m_character || !m_parentWidget) {
+        return;
+    }
+
+    const QList<Background> backgrounds = DatabaseManager::instance().getAllBackgrounds();
+    if (backgrounds.isEmpty()) {
+        return;
+    }
+
+    QList<ChoiceEntry> entries;
+    for (const Background &background : backgrounds) {
+        if (background.name.startsWith(QStringLiteral("Адаптация предысторий"), Qt::CaseInsensitive)) {
+            continue;
+        }
+        entries.append({background.name, background.name, backgroundDetailsText(background), background.name == m_character->background});
+    }
+
+    SearchableChoiceDialog dialog(
+        QStringLiteral("Выбор предыстории"),
+        QStringLiteral("Выберите предысторию персонажа. В правой панели отображаются умения, владения и стартовое снаряжение."),
+        entries,
+        false,
+        m_parentWidget);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QString selectedBackground = dialog.selectedKey();
+    for (const Background &background : backgrounds) {
+        if (background.name == selectedBackground) {
+            applyBackground(background);
+            return;
+        }
+    }
+}
+
+bool CharacterCreationService::chooseAbilityScoreImprovement(const QString &sourceLabel)
+{
+    if (!m_character || !m_parentWidget) {
+        return false;
+    }
+
+    QMessageBox choiceBox(m_parentWidget);
+    choiceBox.setIcon(QMessageBox::Question);
+    choiceBox.setWindowTitle(sourceLabel);
+    choiceBox.setText(QStringLiteral("Выберите формат повышения характеристик для этого слота."));
+    choiceBox.setInformativeText(QStringLiteral("По правилам можно либо повысить одну характеристику на 2, либо две разные на 1."));
+
+    QPushButton *singleAbilityBtn = choiceBox.addButton(QStringLiteral("+2 к одной характеристике"), QMessageBox::AcceptRole);
+    choiceBox.addButton(QStringLiteral("+1 к двум характеристикам"), QMessageBox::AcceptRole);
+    QPushButton *cancelBtn = choiceBox.addButton(QStringLiteral("Отмена"), QMessageBox::RejectRole);
+    choiceBox.exec();
+
+    if (choiceBox.clickedButton() == cancelBtn) {
+        return false;
+    }
+
+    QMap<QString, int> bonuses;
+    const bool pickSingleAbility = choiceBox.clickedButton() == singleAbilityBtn;
+    const bool ok = chooseAbilityIncreaseTargets(
+        m_parentWidget,
+        sourceLabel,
+        pickSingleAbility
+            ? QStringLiteral("Выберите характеристику для бонуса +2.")
+            : QStringLiteral("Выберите две разные характеристики для бонуса +1."),
+        pickSingleAbility ? 1 : 2,
+        pickSingleAbility ? 2 : 1,
+        {},
+        &bonuses);
+
+    if (!ok || bonuses.isEmpty()) {
+        return false;
+    }
+
+    for (auto it = bonuses.begin(); it != bonuses.end(); ++it) {
+        applyAbilityIncrease(it.key(), it.value());
+    }
+
+    m_character->abilityScoreImprovementLog << QStringLiteral("%1: %2")
+        .arg(sourceLabel, formatAbilityIncreaseSummary(bonuses));
+    m_character->recalculateDerivedStats(false);
+    return true;
+}
+
+void CharacterCreationService::applyFeat(const Feat &feat)
+{
+    if (!m_character) {
+        return;
+    }
+
+    if (!m_character->featNames.contains(feat.name)) {
+        m_character->featNames << feat.name;
+    }
+
+    QString summary = feat.description;
+    if (!feat.benefits.isEmpty()) {
+        if (!summary.isEmpty()) {
+            summary += QStringLiteral("\n\n");
+        }
+        summary += feat.benefits.join(QStringLiteral("\n"));
+    }
+    m_character->featDescriptions.insert(feat.name, summary);
+
+    int increaseAmount = 0;
+    QStringList candidateAbilities;
+    const QString abilityText = feat.benefits.join(QStringLiteral(" "));
+    const QRegularExpression amountRegex(QStringLiteral("на\\s*(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch match = amountRegex.match(abilityText);
+    if (match.hasMatch()) {
+        increaseAmount = match.captured(1).toInt();
+    }
+
+    const QStringList allAbilities = {
+        QStringLiteral("Сила"),
+        QStringLiteral("Ловкость"),
+        QStringLiteral("Телосложение"),
+        QStringLiteral("Интеллект"),
+        QStringLiteral("Мудрость"),
+        QStringLiteral("Харизма")
+    };
+    for (const QString &ability : allAbilities) {
+        if (abilityText.contains(ability, Qt::CaseInsensitive)) {
+            candidateAbilities << ability;
+        }
+    }
+
+    if (increaseAmount > 0) {
+        if (candidateAbilities.isEmpty() && abilityText.contains(QStringLiteral("по вашему выбору"), Qt::CaseInsensitive)) {
+            candidateAbilities = allAbilities;
+        }
+
+        candidateAbilities = uniqueStrings(candidateAbilities);
+        if (!candidateAbilities.isEmpty()) {
+            QString selectedAbility;
+            if (candidateAbilities.size() == 1) {
+                selectedAbility = candidateAbilities.first();
+            } else {
+                bool ok = false;
+                selectedAbility = QInputDialog::getItem(
+                    m_parentWidget,
+                    QStringLiteral("Черта: %1").arg(feat.name),
+                    QStringLiteral("Выберите характеристику для бонуса +%1:").arg(increaseAmount),
+                    candidateAbilities,
+                    0,
+                    false,
+                    &ok);
+                if (!ok) {
+                    selectedAbility.clear();
+                }
+            }
+
+            if (!selectedAbility.isEmpty()) {
+                applyAbilityIncrease(selectedAbility, increaseAmount);
+            }
+        }
+    }
+}
+
+bool CharacterCreationService::chooseStartingFeats()
+{
+    if (!m_character || !m_parentWidget) {
+        return false;
+    }
+
+    const QString rulesError = CharacterProgressionRules::instance().loadError();
+    if (!rulesError.isEmpty()) {
+        QMessageBox::warning(m_parentWidget, QStringLiteral("Правила прогрессии"), rulesError);
+        return false;
+    }
+
+    const int availableFeatSlots = totalFeatSlots(m_selectedClassLevels);
+    if (availableFeatSlots <= 0) {
+        return true;
+    }
+
+    const QList<Feat> feats = DatabaseManager::instance().getAllFeats();
+    if (feats.isEmpty()) {
+        return true;
+    }
+
+    int slotIndex = spentAdvancementSlots(m_character);
+    while (slotIndex < availableFeatSlots) {
+        const QString slotLabel = advancementChoiceLabel(slotIndex + 1);
+
+        QMessageBox choiceBox(m_parentWidget);
+        choiceBox.setIcon(QMessageBox::Question);
+        choiceBox.setWindowTitle(slotLabel);
+        choiceBox.setText(QStringLiteral("Выберите, как использовать этот слот развития."));
+        choiceBox.setInformativeText(QStringLiteral("Доступны два варианта: взять черту или выполнить повышение характеристик."));
+
+        choiceBox.addButton(QStringLiteral("Взять черту"), QMessageBox::AcceptRole);
+        QPushButton *asiBtn = choiceBox.addButton(QStringLiteral("Повысить характеристики"), QMessageBox::AcceptRole);
+        QPushButton *cancelBtn = choiceBox.addButton(QStringLiteral("Отмена"), QMessageBox::RejectRole);
+        choiceBox.exec();
+
+        if (choiceBox.clickedButton() == cancelBtn) {
+            return false;
+        }
+
+        if (choiceBox.clickedButton() == asiBtn) {
+            if (!chooseAbilityScoreImprovement(slotLabel)) {
+                return false;
+            }
+            ++slotIndex;
+            continue;
+        }
+
+        QList<Feat> eligibleFeats;
+        for (const Feat &feat : feats) {
+            if (featSatisfiesPrerequisite(feat, m_character, m_selectedClassLevels, m_character->featNames, true)) {
+                eligibleFeats.append(feat);
+            }
+        }
+
+        if (eligibleFeats.isEmpty()) {
+            QMessageBox::information(
+                m_parentWidget,
+                slotLabel,
+                QStringLiteral("Для этого слота нет доступных черт по prerequisite. Выберите повышение характеристик."));
+            if (!chooseAbilityScoreImprovement(slotLabel)) {
+                return false;
+            }
+            ++slotIndex;
+            continue;
+        }
+
+        QList<ChoiceEntry> entries;
+        for (const Feat &feat : eligibleFeats) {
+            entries.append({feat.name, feat.name, featDetailsText(feat), false});
+        }
+
+        SearchableChoiceDialog dialog(
+            slotLabel,
+            QStringLiteral("Выберите одну черту для этого слота. Недоступные по prerequisite варианты скрыты."),
+            entries,
+            false,
+            m_parentWidget);
+
+        if (dialog.exec() != QDialog::Accepted) {
+            return false;
+        }
+
+        const QString selectedFeatName = dialog.selectedKey().trimmed();
+        if (selectedFeatName.isEmpty()) {
+            QMessageBox::warning(m_parentWidget, slotLabel, QStringLiteral("Нужно выбрать черту или вернуться к выбору ASI."));
+            continue;
+        }
+
+        for (const Feat &feat : eligibleFeats) {
+            if (feat.name == selectedFeatName &&
+                !featSatisfiesPrerequisite(feat, m_character, m_selectedClassLevels, m_character->featNames + QStringList{selectedFeatName}, false)) {
+                QMessageBox::warning(
+                    m_parentWidget,
+                    QStringLiteral("Требования к черте"),
+                    QStringLiteral("Черта «%1» не проходит prerequisite: %2")
+                        .arg(feat.name, feat.prerequisite.isEmpty() ? QStringLiteral("требование не выполнено") : feat.prerequisite));
+                break;
+            }
+
+            if (feat.name == selectedFeatName) {
+                applyFeat(feat);
+                m_character->recalculateDerivedStats(false);
+                ++slotIndex;
+                break;
+            }
+        }
+    }
+
+    return true;
+}
+
+void CharacterCreationService::addInventoryItem(const Item &item)
+{
+    if (!m_character || item.name.trimmed().isEmpty()) {
+        return;
+    }
+
+    for (Item &existing : m_character->inventory) {
+        if (existing.name.compare(item.name, Qt::CaseInsensitive) == 0) {
+            existing.quantity += qMax(1, item.quantity);
+            return;
+        }
+    }
+
+    m_character->inventory.append(item);
+}
+
+void CharacterCreationService::addInventoryTextEntry(const QString &entry)
+{
+    if (!m_character || entry.trimmed().isEmpty()) {
+        return;
+    }
+
+    Item item;
+    item.name = entry.trimmed();
+    item.description = QStringLiteral("Стартовое снаряжение");
+    addInventoryItem(item);
+}
+
+void CharacterCreationService::chooseStartingEquipment()
+{
+    if (!m_character || !m_parentWidget) {
+        return;
+    }
+
+    const QList<Item> items = DatabaseManager::instance().getAllItems();
+    if (items.isEmpty()) {
+        return;
+    }
+
+    QList<ChoiceEntry> entries;
+    for (const Item &item : items) {
+        bool alreadySelected = false;
+        for (const Item &existing : m_character->inventory) {
+            if (existing.name.compare(item.name, Qt::CaseInsensitive) == 0) {
+                alreadySelected = true;
+                break;
+            }
+        }
+        entries.append({item.name, item.name, itemDetailsText(item), alreadySelected});
+    }
+
+    SearchableChoiceDialog dialog(
+        QStringLiteral("Стартовое снаряжение"),
+        QStringLiteral("Снаряжение предыстории уже добавлено автоматически. При необходимости отметьте дополнительные предметы из базы."),
+        entries,
+        true,
+        m_parentWidget);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QStringList selectedItemNames = dialog.selectedKeys();
+    QList<Item> retainedInventory;
+    for (const Item &existing : m_character->inventory) {
+        if (existing.description == QStringLiteral("Стартовое снаряжение") && existing.type.isEmpty()) {
+            retainedInventory.append(existing);
+        }
+    }
+    m_character->inventory = retainedInventory;
+
+    for (const Item &item : items) {
+        if (selectedItemNames.contains(item.name)) {
+            addInventoryItem(item);
+        }
+    }
+}

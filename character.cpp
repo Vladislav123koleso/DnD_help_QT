@@ -476,6 +476,30 @@ QMap<QString, int> jsonObjectToIntMap(const QJsonValue &value)
     return map;
 }
 
+QJsonObject stringListMapToJsonObject(const QMap<QString, QStringList> &map)
+{
+    QJsonObject object;
+    for (auto it = map.begin(); it != map.end(); ++it) {
+        if (!it.key().trimmed().isEmpty() && !it.value().isEmpty()) {
+            object.insert(it.key(), stringListToJsonArray(it.value()));
+        }
+    }
+    return object;
+}
+
+QMap<QString, QStringList> jsonObjectToStringListMap(const QJsonValue &value)
+{
+    QMap<QString, QStringList> map;
+    const QJsonObject object = value.toObject();
+    for (auto it = object.begin(); it != object.end(); ++it) {
+        const QStringList skills = jsonArrayToStringList(it.value());
+        if (!skills.isEmpty()) {
+            map.insert(it.key(), skills);
+        }
+    }
+    return map;
+}
+
 QJsonObject spellToJson(const Spell &spell)
 {
     QJsonObject object;
@@ -696,6 +720,9 @@ void Character::resetToDefaults()
     weaponProficiencies.clear();
     classLevels.clear();
     classHitDice.clear();
+    subclassSelections.clear();
+    classSkillSelections.clear();
+    classFeatureChoices.clear();
     classOrder.clear();
 
     attacks.clear();
@@ -832,6 +859,9 @@ QJsonObject Character::toJson() const
     obj.insert("weaponProficiencies", stringListToJsonArray(weaponProficiencies));
     obj.insert("classLevels", intMapToJsonObject(classLevels));
     obj.insert("classHitDice", intMapToJsonObject(classHitDice));
+    obj.insert("subclassSelections", stringMapToJsonObject(subclassSelections));
+    obj.insert("classSkillSelections", stringListMapToJsonObject(classSkillSelections));
+    obj.insert("classFeatureChoices", stringMapToJsonObject(classFeatureChoices));
     obj.insert("classOrder", stringListToJsonArray(classOrder));
     obj.insert("attacks", stringListToJsonArray(attacks));
     obj.insert("spellSlotCurrent", intMapToJsonObject(spellSlotCurrent));
@@ -890,6 +920,9 @@ void Character::fromJson(const QJsonObject &obj)
     weaponProficiencies = jsonArrayToStringList(obj.value("weaponProficiencies"));
     classLevels = jsonObjectToIntMap(obj.value("classLevels"));
     classHitDice = jsonObjectToIntMap(obj.value("classHitDice"));
+    subclassSelections = jsonObjectToStringMap(obj.value("subclassSelections"));
+    classSkillSelections = jsonObjectToStringListMap(obj.value("classSkillSelections"));
+    classFeatureChoices = jsonObjectToStringMap(obj.value("classFeatureChoices"));
     classOrder = jsonArrayToStringList(obj.value("classOrder"));
     attacks = jsonArrayToStringList(obj.value("attacks"));
     spellSlotCurrent = jsonObjectToIntMap(obj.value("spellSlotCurrent"));

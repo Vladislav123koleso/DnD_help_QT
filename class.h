@@ -66,6 +66,7 @@ public:
     QList<ClassLevelProgression> progression;
     QList<ClassSection> featureSections;
     QList<ClassSubclass> subclasses;
+    QString selectedSubclassName;
     
     // Visuals
     QString imagePath;

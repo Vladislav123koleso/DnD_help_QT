@@ -5,6 +5,8 @@
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+    app.setOrganizationName(QStringLiteral("DnD_help"));
+    app.setApplicationName(QStringLiteral("DnD_help"));
 
     // Инициализация базы данных
     if (DatabaseManager::instance().connectToDatabase()) {

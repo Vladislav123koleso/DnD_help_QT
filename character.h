@@ -86,6 +86,9 @@ public:
     QStringList weaponProficiencies;
     QMap<QString, int> classLevels;
     QMap<QString, int> classHitDice;
+    QMap<QString, QString> subclassSelections;
+    QMap<QString, QStringList> classSkillSelections;
+    QMap<QString, QString> classFeatureChoices;
     QStringList classOrder;
     
     // Combat

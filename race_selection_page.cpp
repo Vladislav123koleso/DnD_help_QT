@@ -40,9 +40,11 @@ public:
     SubraceSelectionDialog(
         const QString &baseRaceName,
         const QMap<QString, Race> &subraceChoices,
+        const QMap<QString, QString> &cardDescriptions,
         QWidget *parent = nullptr)
         : QDialog(parent),
-          m_subraceChoices(subraceChoices)
+          m_subraceChoices(subraceChoices),
+          m_cardDescriptions(cardDescriptions)
     {
         setWindowTitle(QStringLiteral("Выбор подрасы"));
         resize(1100, 760);
@@ -79,11 +81,14 @@ public:
 
         for (const QString &subraceName : subraceNames) {
             const Race race = m_subraceChoices.value(subraceName);
+            const QString cardDescription = m_cardDescriptions.value(
+                subraceName,
+                selectionCardDescription(race));
             RaceCard *card = new RaceCard(
                 race.name,
                 race.imagePath,
                 race.imagePath,
-                selectionCardDescription(race),
+                cardDescription,
                 scrollContent);
             connect(card, &RaceCard::raceSelected, this, [this, subraceName](const QString &) {
                 showDetails(subraceName);
@@ -127,6 +132,7 @@ private:
     }
 
     QMap<QString, Race> m_subraceChoices;
+    QMap<QString, QString> m_cardDescriptions;
     QString m_selectedSubraceName;
     Race m_selectedRace;
     QStackedWidget *m_stackedWidget = nullptr;
@@ -604,15 +610,17 @@ void RaceSelectionPage::confirmSelection()
     if (options.size() > 1) {
         const Race baseRace = raceData.value(selectedName, selectedRace);
         QMap<QString, Race> subraceChoices;
+        QMap<QString, QString> cardDescriptions;
         for (const QString &subraceName : options) {
             const Race subrace = raceData.value(subraceName);
             if (subrace.name.trimmed().isEmpty()) {
                 continue;
             }
+            cardDescriptions.insert(subraceName, selectionCardDescription(subrace));
             subraceChoices.insert(subraceName, mergeRaceWithSubrace(baseRace, subrace));
         }
 
-        SubraceSelectionDialog dialog(selectedName, subraceChoices, this);
+        SubraceSelectionDialog dialog(selectedName, subraceChoices, cardDescriptions, this);
         if (dialog.exec() != QDialog::Accepted) {
             return;
         }

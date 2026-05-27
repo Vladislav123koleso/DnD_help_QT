@@ -14,6 +14,7 @@
 #include "character.h"
 #include "race.h"
 #include "class.h"
+#include "noteswidget.h"
 
 class PlayerPage : public QWidget
 {
@@ -38,6 +39,7 @@ private:
     RaceSelectionPage *racePage; // The race selection page
     ClassSelectionPage *classPage; // The class selection page
     CharacterSheet *characterSheet; // The character sheet widget
+    NotesWidget *notesWidget; // Заметки игрока
     QString currentCampaign;
     
     Character *currentCharacter;
@@ -46,8 +48,12 @@ private:
     QMap<QString, int> baseAbilityScores;
     QMap<QString, int> selectedClassLevels;
     QMap<QString, Class> selectedClasses;
+    QMap<QString, QString> selectedSubclassNames;
+    QMap<QString, QStringList> selectedClassSkillSelections;
+    QMap<QString, QString> selectedClassFeatureChoices;
     QStringList classSelectionOrder;
     bool levelUpInProgress = false;
+    bool levelUpChoosingMulticlass = false;
     int levelUpPreviousMaxHp = 0;
     int levelUpPreviousFeatSlots = 0;
     QJsonObject levelUpSnapshot;
@@ -57,6 +63,10 @@ private:
     void resetClassSelection();
     void updateCharacterClassSummary();
     void prepareSelectedClassesFromCharacter();
+    QString lastTakenClassName() const;
+    bool applyClassLevelChange(const Class &cls, int levelsToAdd);
+    bool chooseClassSkillProficiencies(Class &cls, bool multiclassEntry);
+    bool chooseClassFeatureChoices(const Class &cls, int classLevel);
     void applyRaceDerivedBenefits(const Race &race);
     void cancelPendingLevelUp(bool restoreCharacter = false);
     int remainingLevelsToAllocate() const;
@@ -67,6 +77,7 @@ private:
     bool applyBackground(const Background &background);
     bool chooseStartingFeats();
     void applyFeat(const Feat &feat);
+    bool chooseSubclassForClass(Class *cls, int classLevel);
     bool chooseAbilityScoreImprovement(const QString &sourceLabel);
     void applyAbilityIncrease(const QString &abilityName, int amount);
     bool resolveChosenLanguages(const QStringList &languageEntries, const QString &sourceName, const QStringList &existingLanguages, QStringList *resolvedLanguages);

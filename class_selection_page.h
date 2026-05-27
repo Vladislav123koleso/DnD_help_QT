@@ -8,6 +8,8 @@
 #include "classcard.h"
 #include "classdetailspage.h"
 
+class FlowLayout;
+
 class ClassSelectionPage : public QWidget {
     Q_OBJECT
 public:
@@ -24,13 +26,20 @@ public slots:
     void showList();
     void confirmSelection();
 
+    void setExcludedClassNames(const QStringList &classNames);
+    void clearClassFilters();
+
 private:
    void setupUi();
+   void rebuildClassList();
    QStackedWidget *stackedWidget;
    QWidget *listPage;
+   QWidget *listScrollContent = nullptr;
+   FlowLayout *listContentLayout = nullptr;
    ClassDetailsPage *detailsPage;
    
    QMap<QString, Class> classData;
+   QStringList excludedClassNames;
    void loadClassData();
     QString resolveClassesJsonPath() const;
     QString detectImagePath(const QString &classSlug) const;

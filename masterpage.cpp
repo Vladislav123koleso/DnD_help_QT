@@ -10,6 +10,9 @@
 #include "spellbookwidget.h"
 #include "itembookwidget.h"
 #include "bestiarywidget.h"
+#include "noteswidget.h"
+#include "namegeneratorwidget.h"
+#include "artifactgeneratorwidget.h"
 
 MasterPage::MasterPage(QWidget *parent) : QWidget(parent)
 {
@@ -18,7 +21,17 @@ MasterPage::MasterPage(QWidget *parent) : QWidget(parent)
 
 void MasterPage::setCampaign(const QString &campaignName)
 {
-    currentCampaign = campaignName;
+    currentCampaign = campaignName.trimmed();
+    const QString scopeSuffix = currentCampaign.isEmpty() ? QStringLiteral("default") : currentCampaign;
+    if (notesWidget) {
+        notesWidget->setStorageScope(QStringLiteral("master_%1").arg(scopeSuffix));
+    }
+    if (npcCreatorWidget) {
+        npcCreatorWidget->setStorageScope(QStringLiteral("master_%1").arg(scopeSuffix));
+    }
+    if (npcListWidget) {
+        npcListWidget->setStorageScope(QStringLiteral("master_%1").arg(scopeSuffix));
+    }
 }
 
 void MasterPage::setupUi()
@@ -27,28 +40,24 @@ void MasterPage::setupUi()
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Left Side Container
     QWidget *leftPanel = new QWidget(this);
     leftPanel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
-    
+
     QVBoxLayout *leftLayout = new QVBoxLayout(leftPanel);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(0);
 
-    // Toggle Sidebar Button
-    QPushButton *toggleBtn = new QPushButton("◀", this);
+    QPushButton *toggleBtn = new QPushButton(QStringLiteral("◀"), this);
     toggleBtn->setFixedSize(40, 40);
     toggleBtn->setStyleSheet(
         "QPushButton { font-size: 18px; font-weight: bold; border: none; background-color: #333; color: white; }"
         "QPushButton:hover { background-color: #444; }"
         "QToolTip { font-size: 12px; font-weight: normal; }"
     );
-    toggleBtn->setToolTip("Свернуть/Развернуть меню");
-    
-    // Add button aligned to left so it doesn't move when panel width changes
+    toggleBtn->setToolTip(QStringLiteral("Свернуть/Развернуть меню"));
+
     leftLayout->addWidget(toggleBtn, 0, Qt::AlignLeft);
 
-    // Navigation List
     navBar = new QListWidget(this);
     navBar->setFixedWidth(180);
     navBar->setStyleSheet(
@@ -58,29 +67,26 @@ void MasterPage::setupUi()
         "QListWidget::item:hover { background-color: #353535; }"
     );
     leftLayout->addWidget(navBar, 1);
-    leftLayout->addStretch(0); // Push content up when navbar is hidden
+    leftLayout->addStretch(0);
 
     connect(toggleBtn, &QPushButton::clicked, [this, toggleBtn]() {
-        bool isVisible = navBar->isVisible();
+        const bool isVisible = navBar->isVisible();
         navBar->setVisible(!isVisible);
-        toggleBtn->setText(isVisible ? "▶" : "◀");
+        toggleBtn->setText(isVisible ? QStringLiteral("▶") : QStringLiteral("◀"));
     });
 
     mainLayout->addWidget(leftPanel);
 
-    // Right Side Container
     QWidget *rightPanel = new QWidget(this);
     QVBoxLayout *rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(0, 0, 0, 0);
     rightLayout->setSpacing(0);
 
-    // Top Bar for Menu Button
     QHBoxLayout *topBar = new QHBoxLayout();
-    topBar->addStretch(); // Push to right
-    
-    // Menu Button (Hamburger)
+    topBar->addStretch();
+
     QToolButton *menuBtn = new QToolButton(this);
-    menuBtn->setText("☰");
+    menuBtn->setText(QStringLiteral("☰"));
     menuBtn->setAutoRaise(true);
     menuBtn->setPopupMode(QToolButton::InstantPopup);
     menuBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
@@ -90,68 +96,75 @@ void MasterPage::setupUi()
     menuBtn->setFont(btnFont);
 
     QMenu *menu = new QMenu(this);
-    menu->addAction("Option 1");
-    menu->addAction("Option 2");
+    menu->addAction(QStringLiteral("Option 1"));
+    menu->addAction(QStringLiteral("Option 2"));
     menu->addSeparator();
-    QAction *mainMenuAction = menu->addAction("Главное меню");
+    QAction *mainMenuAction = menu->addAction(QStringLiteral("Главное меню"));
 
     menuBtn->setMenu(menu);
     connect(mainMenuAction, &QAction::triggered, this, &MasterPage::mainMenuRequested);
-    
+
     topBar->addWidget(menuBtn);
     topBar->setContentsMargins(0, 0, 10, 0);
-
     rightLayout->addLayout(topBar);
 
-    // Content Stack
     contentStack = new QStackedWidget(this);
 
-    // Create Tabs/Pages
-    QStringList tabNames = {
-        "Заметки",
-        "Создание NPC",
-        "Список Созданных НПС",
-        "Список Заклинаний",
-        "Список Предметов",
-        "Список Оружия и доспехов",
-        "Бестиарий",
-        "Генератор Названий\\Имен",
-        "Генератор Артефактов"
+    const QStringList tabNames = {
+        QStringLiteral("Заметки"),
+        QStringLiteral("Создание NPC"),
+        QStringLiteral("Список Созданных НПС"),
+        QStringLiteral("Список Заклинаний"),
+        QStringLiteral("Список Предметов"),
+        QStringLiteral("Список Оружия и доспехов"),
+        QStringLiteral("Бестиарий"),
+        QStringLiteral("Генератор Названий\\Имен"),
+        QStringLiteral("Генератор Артефактов")
     };
 
-    for (const QString &name : tabNames) {
-        // Add item to list
+    for (int tabIndex = 0; tabIndex < tabNames.size(); ++tabIndex) {
+        const QString &name = tabNames.at(tabIndex);
         navBar->addItem(name);
 
-        // Add page to stack
         QWidget *page = new QWidget();
         QVBoxLayout *pageLayout = new QVBoxLayout(page);
-        
-        if (name == "Список Заклинаний") {
+
+        if (tabIndex == 0) {
+            notesWidget = new NotesWidget(this);
+            pageLayout->addWidget(notesWidget);
+        } else if (tabIndex == 1) {
+            npcCreatorWidget = new NpcCreatorWidget(this);
+            pageLayout->addWidget(npcCreatorWidget);
+        } else if (tabIndex == 2) {
+            npcListWidget = new NpcListWidget(this);
+            pageLayout->addWidget(npcListWidget);
+        } else if (tabIndex == 3) {
             pageLayout->addWidget(new SpellBookWidget(this));
-        } else if (name == "Список Предметов") {
-            // General Items only
+        } else if (tabIndex == 4) {
             pageLayout->addWidget(new ItemBookWidget(ItemBookWidget::GeneralItems, this));
-        } else if (name == "Список Оружия и доспехов") {
-            // Weapons and Armor only
+        } else if (tabIndex == 5) {
             pageLayout->addWidget(new ItemBookWidget(ItemBookWidget::WeaponsAndArmor, this));
-        } else if (name == "Бестиарий") {
+        } else if (tabIndex == 6) {
             pageLayout->addWidget(new BestiaryWidget(this));
+        } else if (tabIndex == 7) {
+            nameGeneratorWidget = new NameGeneratorWidget(this);
+            pageLayout->addWidget(nameGeneratorWidget);
+        } else if (tabIndex == 8) {
+            artifactGeneratorWidget = new ArtifactGeneratorWidget(this);
+            pageLayout->addWidget(artifactGeneratorWidget);
         } else {
-            QLabel *label = new QLabel(name + " Placeholder");
+            QLabel *label = new QLabel(name + QStringLiteral(" Placeholder"));
             label->setAlignment(Qt::AlignCenter);
             pageLayout->addWidget(label);
         }
-        
+
         contentStack->addWidget(page);
     }
-    
+
     rightLayout->addWidget(contentStack);
 
-    // Connect selection
     connect(navBar, &QListWidget::currentRowChanged, contentStack, &QStackedWidget::setCurrentIndex);
 
-    // Select first item by default
     if (navBar->count() > 0) {
         navBar->setCurrentRow(0);
     }

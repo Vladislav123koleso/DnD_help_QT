@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <QPushButton>
+#include <QListWidget>
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -31,12 +32,20 @@ private:
    QLabel *savesLabel;
    QLabel *armorLabel;
    QLabel *weaponsLabel;
-    QTextEdit *detailsText;
+   QLabel *skillsLabel;
+   QLabel *toolsLabel;
+    QTextEdit *progressionText;
+    QListWidget *featuresList;
+    QListWidget *subclassesList;
+    QTextEdit *subclassDetailsText;
 
    QPushButton *backButton;
    QPushButton *continueButton;
    
    Class m_class;
+
+   void updateSubclassDetails(QListWidgetItem *item);
+   void showFeaturePopup(const QString &title, const QString &description, const QPoint &globalPos);
 };
 
 #endif // CLASSDETAILSPAGE_H

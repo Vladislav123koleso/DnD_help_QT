@@ -47,6 +47,8 @@ RaceCard::RaceCard(const QString &raceName, const QString &imgNormal, const QStr
 
     // Initial Setup
     ui->nameLabel->setText(raceName);
+    ui->nameLabel->setStyleSheet(QStringLiteral(
+        "color: #f5f5f5; padding-top: 6px; background: transparent; font-weight: 700;"));
     ui->descOverlay->setText(desc);
     
     // Explicitly hide overlay initially

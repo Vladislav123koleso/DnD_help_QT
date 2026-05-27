@@ -12,6 +12,7 @@ QML_DESIGNER_IMPORT_PATH =
 
 QMAKE_CXXFLAGS_DEBUG += -g
 QMAKE_LFLAGS_DEBUG += -g
+QMAKE_CXXFLAGS += -finput-charset=UTF-8 -fexec-charset=UTF-8
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
@@ -32,6 +33,12 @@ SOURCES += \
     race.cpp \
     class.cpp \
     note.cpp \
+    npc.cpp \
+    noteswidget.cpp \
+    spellselectdialog.cpp \
+    npccreatorwidget.cpp \
+    charactercreationservice.cpp \
+    npclistwidget.cpp \
     databasemanager.cpp \
     spellbookwidget.cpp \
     itembookwidget.cpp \
@@ -45,7 +52,9 @@ SOURCES += \
     flowlayout.cpp \
     racecard.cpp \
     classcard.cpp \
-    charactersheet.cpp
+    charactersheet.cpp \
+    namegeneratorwidget.cpp \
+    artifactgeneratorwidget.cpp
 
 HEADERS += \
     background.h \
@@ -60,6 +69,12 @@ HEADERS += \
     race.h \
     class.h \
     note.h \
+    npc.h \
+    noteswidget.h \
+    spellselectdialog.h \
+    npccreatorwidget.h \
+    charactercreationservice.h \
+    npclistwidget.h \
     databasemanager.h \
     spellbookwidget.h \
     itembookwidget.h \
@@ -73,7 +88,9 @@ HEADERS += \
     flowlayout.h \
     racecard.h \
     classcard.h \
-    charactersheet.h
+    charactersheet.h \
+    namegeneratorwidget.h \
+    artifactgeneratorwidget.h
 
 
 FORMS += \
