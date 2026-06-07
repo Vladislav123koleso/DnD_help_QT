@@ -1,4 +1,4 @@
-#include "namegeneratorwidget.h"
+﻿#include "namegeneratorwidget.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -15,6 +15,7 @@
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSet>
+#include <QSplitter>
 #include <QSpinBox>
 #include <QVBoxLayout>
 #include <QComboBox>
@@ -50,14 +51,15 @@ double jsonChance(const QJsonValue &value, double fallback)
 NameGeneratorWidget::NameGeneratorWidget(QWidget *parent)
     : QWidget(parent)
 {
+    setObjectName(QStringLiteral("NameGeneratorWidget"));
     setupUi();
 
     if (!loadData()) {
         statusLabel->setText(QStringLiteral("Не удалось загрузить базы генератора. Проверьте JSON в папке data/."));
-        statusLabel->setStyleSheet(QStringLiteral("color: #ff6b6b;"));
+        statusLabel->setStyleSheet(QStringLiteral("color: #9d3a34;"));
     } else {
         statusLabel->setText(QStringLiteral("Базы генератора загружены."));
-        statusLabel->setStyleSheet(QStringLiteral("color: #8bd17c;"));
+        statusLabel->setStyleSheet(QStringLiteral("color: #3f6f4f;"));
     }
 
     fillRaceCombo();
@@ -75,8 +77,11 @@ NameGeneratorWidget::NameGeneratorWidget(QWidget *parent)
 void NameGeneratorWidget::setupUi()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(10, 10, 10, 10);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
     mainLayout->setSpacing(12);
+
+    QSplitter *contentSplitter = new QSplitter(Qt::Vertical, this);
+    contentSplitter->setChildrenCollapsible(false);
 
     QGroupBox *nameGroup = new QGroupBox(QStringLiteral("Генерация имён персонажей"), this);
     QVBoxLayout *nameGroupLayout = new QVBoxLayout(nameGroup);
@@ -98,13 +103,14 @@ void NameGeneratorWidget::setupUi()
     nameGroupLayout->addLayout(nameForm);
 
     generateNamesBtn = new QPushButton(QStringLiteral("Сгенерировать имена"), nameGroup);
+    generateNamesBtn->setProperty("variant", QStringLiteral("accent"));
     nameGroupLayout->addWidget(generateNamesBtn);
 
     namesOutput = new QPlainTextEdit(nameGroup);
     namesOutput->setReadOnly(true);
     namesOutput->setPlaceholderText(QStringLiteral("Здесь появится список сгенерированных имён."));
-    namesOutput->setMinimumHeight(170);
-    nameGroupLayout->addWidget(namesOutput);
+    namesOutput->setMinimumHeight(130);
+    nameGroupLayout->addWidget(namesOutput, 1);
 
     QGroupBox *placeGroup = new QGroupBox(QStringLiteral("Генерация названий локаций"), this);
     QVBoxLayout *placeGroupLayout = new QVBoxLayout(placeGroup);
@@ -129,22 +135,27 @@ void NameGeneratorWidget::setupUi()
     placeGroupLayout->addLayout(placeForm);
 
     generatePlacesBtn = new QPushButton(QStringLiteral("Сгенерировать названия"), placeGroup);
+    generatePlacesBtn->setProperty("variant", QStringLiteral("accent"));
     placeGroupLayout->addWidget(generatePlacesBtn);
 
     placesOutput = new QPlainTextEdit(placeGroup);
     placesOutput->setReadOnly(true);
-    placesOutput->setPlaceholderText(QStringLiteral("Здесь появится список названий городов/деревень/местностей."));
-    placesOutput->setMinimumHeight(170);
-    placeGroupLayout->addWidget(placesOutput);
+    placesOutput->setPlaceholderText(QStringLiteral("Здесь появится список названий городов, деревень и местностей."));
+    placesOutput->setMinimumHeight(130);
+    placeGroupLayout->addWidget(placesOutput, 1);
 
     statusLabel = new QLabel(this);
     statusLabel->setWordWrap(true);
 
-    mainLayout->addWidget(nameGroup);
-    mainLayout->addWidget(placeGroup);
+    contentSplitter->addWidget(nameGroup);
+    contentSplitter->addWidget(placeGroup);
+    contentSplitter->setStretchFactor(0, 1);
+    contentSplitter->setStretchFactor(1, 1);
+    contentSplitter->setSizes({430, 430});
+
+    mainLayout->addWidget(contentSplitter, 1);
     mainLayout->addWidget(statusLabel);
 }
-
 QString NameGeneratorWidget::resolveDataPath(const QString &relativePath) const
 {
     const QString appDir = QCoreApplication::applicationDirPath();
@@ -755,3 +766,4 @@ void NameGeneratorWidget::onPlaceTypeChanged()
     terrainTypeLabel->setVisible(isTerrain);
     terrainTypeCombo->setVisible(isTerrain);
 }
+

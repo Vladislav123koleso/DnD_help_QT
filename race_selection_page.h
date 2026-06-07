@@ -43,7 +43,7 @@ private:
     void loadSubracesMapFromJson();
     QString resolveRacesJsonPath() const;
     QString resolveSubracesMapPath() const;
-    QString detectImagePath(const QString &raceName) const;
+    QString detectImagePath(const QString &raceName, const QString &raceSlug = QString(), int state = 1) const;
     QString shortDescription(const Race &race) const;
     Race displayRaceForSelection(const QString &raceName) const;
     Race mergeRaceWithSubrace(const Race &baseRace, const Race &subrace) const;

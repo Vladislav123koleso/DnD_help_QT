@@ -1,4 +1,4 @@
-#include "artifactgeneratorwidget.h"
+﻿#include "artifactgeneratorwidget.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -62,21 +62,21 @@ int jsonInt(const QJsonValue &value, int fallback, int minValue = -1000, int max
 QString rarityRestoreDice(const QString &key)
 {
     if (key == QStringLiteral("common")) {
-        return QStringLiteral("1к4");
+        return QStringLiteral("1Рє4");
     }
     if (key == QStringLiteral("uncommon")) {
-        return QStringLiteral("1к4");
+        return QStringLiteral("1Рє4");
     }
     if (key == QStringLiteral("rare")) {
-        return QStringLiteral("1к4+1");
+        return QStringLiteral("1Рє4+1");
     }
     if (key == QStringLiteral("very_rare")) {
-        return QStringLiteral("1к6+1");
+        return QStringLiteral("1Рє6+1");
     }
     if (key == QStringLiteral("legendary")) {
-        return QStringLiteral("1к6+2");
+        return QStringLiteral("1Рє6+2");
     }
-    return QStringLiteral("1к6+4");
+    return QStringLiteral("1Рє6+4");
 }
 
 } // namespace
@@ -84,14 +84,15 @@ QString rarityRestoreDice(const QString &key)
 ArtifactGeneratorWidget::ArtifactGeneratorWidget(QWidget *parent)
     : QWidget(parent)
 {
+    setObjectName(QStringLiteral("ArtifactGeneratorWidget"));
     setupUi();
 
     if (!loadData()) {
         statusLabel->setText(QStringLiteral("Не удалось загрузить базу артефактов. Проверьте data/fantasy_artifacts.json."));
-        statusLabel->setStyleSheet(QStringLiteral("color: #ff6b6b;"));
+        statusLabel->setStyleSheet(QStringLiteral("color: #9d3a34;"));
     } else {
         statusLabel->setText(QStringLiteral("База артефактов загружена."));
-        statusLabel->setStyleSheet(QStringLiteral("color: #8bd17c;"));
+        statusLabel->setStyleSheet(QStringLiteral("color: #3f6f4f;"));
     }
 
     fillCombos();
@@ -113,7 +114,7 @@ ArtifactGeneratorWidget::ArtifactGeneratorWidget(QWidget *parent)
 void ArtifactGeneratorWidget::setupUi()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(10, 10, 10, 10);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
     mainLayout->setSpacing(12);
 
     QGroupBox *paramsGroup = new QGroupBox(QStringLiteral("Параметры генерации артефактов"), this);
@@ -152,16 +153,20 @@ void ArtifactGeneratorWidget::setupUi()
     paramsLayout->addWidget(drawbacksCheck);
     paramsLayout->addWidget(strictArtifactCheck);
 
+    QHBoxLayout *buttonRow = new QHBoxLayout();
     generateBtn = new QPushButton(QStringLiteral("Сгенерировать артефакты"), paramsGroup);
-    paramsLayout->addWidget(generateBtn);
-    generateRandomBtn = new QPushButton(QStringLiteral("Сгенерировать случайный артефакт"), paramsGroup);
-    paramsLayout->addWidget(generateRandomBtn);
+    generateBtn->setProperty("variant", QStringLiteral("accent"));
+    generateRandomBtn = new QPushButton(QStringLiteral("Полностью случайный артефакт"), paramsGroup);
+    generateRandomBtn->setProperty("variant", QStringLiteral("accent"));
+    buttonRow->addWidget(generateBtn, 1);
+    buttonRow->addWidget(generateRandomBtn, 1);
+    paramsLayout->addLayout(buttonRow);
 
     resultOutput = new QPlainTextEdit(this);
     resultOutput->setReadOnly(true);
     resultOutput->setPlaceholderText(
         QStringLiteral("Здесь появятся сгенерированные артефакты: название, редкость, свойства, цена, история и условия уничтожения."));
-    resultOutput->setMinimumHeight(340);
+    resultOutput->setMinimumHeight(180);
 
     statusLabel = new QLabel(this);
     statusLabel->setWordWrap(true);
@@ -170,7 +175,6 @@ void ArtifactGeneratorWidget::setupUi()
     mainLayout->addWidget(resultOutput, 1);
     mainLayout->addWidget(statusLabel);
 }
-
 QString ArtifactGeneratorWidget::resolveDataPath(const QString &relativePath) const
 {
     const QString appDir = QCoreApplication::applicationDirPath();
@@ -505,7 +509,7 @@ QString ArtifactGeneratorWidget::buildName(const ArtifactTypeData &typeData, con
         templates = {
             QStringLiteral("{prefix} {core}{suffix}"),
             QStringLiteral("{core}{suffix} {theme}"),
-            QStringLiteral("{type} «{prefix} {core}»"),
+            QStringLiteral("{type} В«{prefix} {core}В»"),
             QStringLiteral("{prefix} {type} {suffix}")
         };
     }
@@ -575,7 +579,7 @@ QString ArtifactGeneratorWidget::buildChargesText(const RarityRule &rarityRule) 
 
     QString restore = rarityRestoreDice(rarityRule.key);
     if (rarityRule.key == QStringLiteral("artifact")) {
-        const QStringList artifactRestore = {QStringLiteral("1к6+4"), QStringLiteral("2к6+2"), QStringLiteral("все")};
+        const QStringList artifactRestore = {QStringLiteral("1Рє6+4"), QStringLiteral("2Рє6+2"), QStringLiteral("РІСЃРµ")};
         restore = randomFrom(artifactRestore);
     }
 
@@ -675,7 +679,7 @@ QString ArtifactGeneratorWidget::renderArtifact(const ArtifactResult &result, in
 {
     QStringList lines;
     lines << QStringLiteral("%1. %2").arg(index).arg(result.name);
-    lines << QStringLiteral("Тип: %1 (%2)").arg(result.typeDisplay, result.form);
+    lines << QStringLiteral("РўРёРї: %1 (%2)").arg(result.typeDisplay, result.form);
     lines << QStringLiteral("Редкость: %1").arg(result.rarityDisplay);
     lines << QStringLiteral("Стоимость: %1").arg(result.price);
     lines << QStringLiteral("Настройка: %1").arg(result.attunement);
@@ -1051,3 +1055,4 @@ void ArtifactGeneratorWidget::generateRandomArtifact()
     const ArtifactResult artifact = generateOneArtifact(true);
     resultOutput->setPlainText(renderArtifact(artifact, 1));
 }
+

@@ -20,6 +20,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 SOURCES += \
+    apptheme.cpp \
     background.cpp \
     characterprogressionrules.cpp \
     character.cpp \
@@ -57,6 +58,7 @@ SOURCES += \
     artifactgeneratorwidget.cpp
 
 HEADERS += \
+    apptheme.h \
     background.h \
     characterprogressionrules.h \
     character.h \

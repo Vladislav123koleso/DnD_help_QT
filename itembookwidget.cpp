@@ -1,133 +1,155 @@
 #include "itembookwidget.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QFormLayout>
-#include <QGroupBox>
+
 #include "databasemanager.h"
 
-ItemBookWidget::ItemBookWidget(FilterMode mode, QWidget *parent) : QWidget(parent), currentMode(mode)
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QSet>
+#include <QSizePolicy>
+#include <QSplitter>
+#include <QVBoxLayout>
+
+#include <algorithm>
+#include <utility>
+
+ItemBookWidget::ItemBookWidget(FilterMode mode, QWidget *parent)
+    : QWidget(parent)
+    , currentMode(mode)
 {
-    QHBoxLayout *mainLayout = new QHBoxLayout(this);
+    setObjectName(QStringLiteral("ItemBookWidget"));
 
-    // --- Left Side: Filters & List ---
-    QVBoxLayout *leftLayout = new QVBoxLayout(); // Removed "this" from layout constructor to avoid parent issues
+    auto *mainLayout = new QHBoxLayout(this);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(8);
 
-    // Filters
-    QHBoxLayout *filterLayout = new QHBoxLayout();
-    
-    searchBar = new QLineEdit();
-    searchBar->setPlaceholderText("Поиск предмета...");
+    auto *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setChildrenCollapsible(false);
+
+    auto *leftContainer = new QWidget(splitter);
+    leftContainer->setMinimumWidth(240);
+    leftContainer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    auto *leftLayout = new QVBoxLayout(leftContainer);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->setSpacing(8);
+
+    auto *filterLayout = new QHBoxLayout();
+    filterLayout->setSpacing(8);
+
+    searchBar = new QLineEdit(leftContainer);
+    searchBar->setPlaceholderText(QStringLiteral("Поиск предмета..."));
     connect(searchBar, &QLineEdit::textChanged, this, &ItemBookWidget::filterItems);
-    
-    typeFilter = new QComboBox();
-    typeFilter->addItem("Все типы");
-    // Types will be populated based on loaded items in loadItems()
+
+    typeFilter = new QComboBox(leftContainer);
+    typeFilter->addItem(QStringLiteral("Все типы"));
     connect(typeFilter, &QComboBox::currentTextChanged, this, &ItemBookWidget::filterItems);
 
-    rarityFilter = new QComboBox();
-    rarityFilter->addItem("Все редкости");
-    rarityFilter->addItem("Обычный");
-    rarityFilter->addItem("Необычный");
-    rarityFilter->addItem("Редкий");
-    rarityFilter->addItem("Очень редкий");
-    rarityFilter->addItem("Легендарный");
+    rarityFilter = new QComboBox(leftContainer);
+    rarityFilter->addItem(QStringLiteral("Все редкости"));
+    rarityFilter->addItem(QStringLiteral("Обычный"));
+    rarityFilter->addItem(QStringLiteral("Необычный"));
+    rarityFilter->addItem(QStringLiteral("Редкий"));
+    rarityFilter->addItem(QStringLiteral("Очень редкий"));
+    rarityFilter->addItem(QStringLiteral("Легендарный"));
     connect(rarityFilter, &QComboBox::currentTextChanged, this, &ItemBookWidget::filterItems);
 
-    filterLayout->addWidget(searchBar);
-    filterLayout->addWidget(typeFilter);
-    filterLayout->addWidget(rarityFilter);
-
+    filterLayout->addWidget(searchBar, 2);
+    filterLayout->addWidget(typeFilter, 1);
+    filterLayout->addWidget(rarityFilter, 1);
     leftLayout->addLayout(filterLayout);
 
-    // List
-    itemList = new QListWidget();
+    itemList = new QListWidget(leftContainer);
     connect(itemList, &QListWidget::itemClicked, this, &ItemBookWidget::onItemSelected);
-    leftLayout->addWidget(itemList);
+    leftLayout->addWidget(itemList, 1);
 
-    // Обертка для левой колонки, чтобы жестко задать ширину
-    QWidget *leftContainer = new QWidget();
-    leftContainer->setLayout(leftLayout);
-    leftContainer->setMaximumWidth(300); // Ограничиваем ширину списка
+    auto *detailsGroup = new QGroupBox(QStringLiteral("Детали предмета"), splitter);
+    auto *detailsLayout = new QVBoxLayout(detailsGroup);
 
-    mainLayout->addWidget(leftContainer);
-
-    // --- Right Side: Details ---
-    QGroupBox *detailsGroup = new QGroupBox("Детали предмета");
-    QVBoxLayout *detailsLayout = new QVBoxLayout(detailsGroup);
-
-    nameLabel = new QLabel("-");
-    // Change color to white (as requested)
-    nameLabel->setStyleSheet("font-size: 16pt; font-weight: bold; color: white;");
+    nameLabel = new QLabel(QStringLiteral("-"), detailsGroup);
+    QFont nameFont = nameLabel->font();
+    nameFont.setPointSize(15);
+    nameFont.setBold(true);
+    nameLabel->setFont(nameFont);
     nameLabel->setAlignment(Qt::AlignCenter);
     nameLabel->setWordWrap(true);
 
-    typeLabel = new QLabel("Тип: -");
-    rarityLabel = new QLabel("Редкость: -");
-    costLabel = new QLabel("Цена: -");
-    weightLabel = new QLabel("Вес: -");
+    typeLabel = new QLabel(QStringLiteral("Тип: -"), detailsGroup);
+    rarityLabel = new QLabel(QStringLiteral("Редкость: -"), detailsGroup);
+    costLabel = new QLabel(QStringLiteral("Цена: -"), detailsGroup);
+    weightLabel = new QLabel(QStringLiteral("Вес: -"), detailsGroup);
 
-    QHBoxLayout *infoRow = new QHBoxLayout();
+    auto *infoRow = new QHBoxLayout();
     infoRow->addWidget(typeLabel);
     infoRow->addWidget(rarityLabel);
-    
-    QHBoxLayout *infoRow2 = new QHBoxLayout();
+
+    auto *infoRow2 = new QHBoxLayout();
     infoRow2->addWidget(costLabel);
     infoRow2->addWidget(weightLabel);
 
-    descriptionText = new QTextEdit();
+    descriptionText = new QTextEdit(detailsGroup);
     descriptionText->setReadOnly(true);
 
     detailsLayout->addWidget(nameLabel);
     detailsLayout->addLayout(infoRow);
     detailsLayout->addLayout(infoRow2);
-    detailsLayout->addWidget(new QLabel("<b>Описание:</b>"));
-    detailsLayout->addWidget(descriptionText);
+    detailsLayout->addWidget(new QLabel(QStringLiteral("<b>Описание:</b>"), detailsGroup));
+    detailsLayout->addWidget(descriptionText, 1);
 
-    mainLayout->addWidget(detailsGroup, 5); // Stretch modified to makes left column smaller
+    splitter->addWidget(leftContainer);
+    splitter->addWidget(detailsGroup);
+    splitter->setStretchFactor(0, 1);
+    splitter->setStretchFactor(1, 2);
+    splitter->setSizes({320, 960});
 
-    // Load Data
+    mainLayout->addWidget(splitter, 1);
+
     loadItems();
 }
 
 void ItemBookWidget::loadItems()
 {
-    QList<Item> rawItems = DatabaseManager::instance().getAllItems();
+    const QList<Item> rawItems = DatabaseManager::instance().getAllItems();
     allItems.clear();
 
-    // Filter by Mode immediately
-    for(const auto& item : rawItems) {
-        bool isWeaponOrArmor = item.type.contains("Оружие", Qt::CaseInsensitive) || item.type.contains("Доспехи", Qt::CaseInsensitive);
+    for (const Item &item : rawItems) {
+        const bool isWeaponOrArmor =
+            item.type.contains(QStringLiteral("Оружие"), Qt::CaseInsensitive) ||
+            item.type.contains(QStringLiteral("Доспехи"), Qt::CaseInsensitive);
 
-        if (currentMode == GeneralItems && isWeaponOrArmor) continue;
-        if (currentMode == WeaponsAndArmor && !isWeaponOrArmor) continue;
+        if (currentMode == GeneralItems && isWeaponOrArmor) {
+            continue;
+        }
+        if (currentMode == WeaponsAndArmor && !isWeaponOrArmor) {
+            continue;
+        }
 
         allItems.append(item);
     }
-    
-    // Сортировка по алфавиту
+
     std::sort(allItems.begin(), allItems.end(), [](const Item &a, const Item &b) {
         return a.name < b.name;
     });
-    
-    // Populate Types logic
+
     QSet<QString> types;
-    for(const auto& item : allItems) {
-        if(item.type.isEmpty()) continue;
-        
-        // Split types by comma to get individual tags (e.g. "Weapon", "Melee")
-        QStringList parts = item.type.split(',', Qt::SkipEmptyParts);
-        for(const QString &part : parts) {
-             types.insert(part.trimmed());
+    for (const Item &item : std::as_const(allItems)) {
+        if (item.type.isEmpty()) {
+            continue;
+        }
+
+        const QStringList parts = item.type.split(QLatin1Char(','), Qt::SkipEmptyParts);
+        for (const QString &part : parts) {
+            const QString trimmed = part.trimmed();
+            if (!trimmed.isEmpty()) {
+                types.insert(trimmed);
+            }
         }
     }
-    
-    // Sort types alphabetically for better UX
+
     QStringList sortedTypes = types.values();
     std::sort(sortedTypes.begin(), sortedTypes.end());
-
-    for(const QString& t : sortedTypes) {
-        if(typeFilter->findText(t) == -1) {
-            typeFilter->addItem(t);
+    for (const QString &type : std::as_const(sortedTypes)) {
+        if (typeFilter->findText(type) == -1) {
+            typeFilter->addItem(type);
         }
     }
 
@@ -137,46 +159,50 @@ void ItemBookWidget::loadItems()
 void ItemBookWidget::filterItems()
 {
     itemList->clear();
-    QString search = searchBar->text().toLower();
-    QString typeSel = typeFilter->currentText();
-    QString raritySel = rarityFilter->currentText();
+    const QString search = searchBar->text().trimmed().toLower();
+    const QString selectedType = typeFilter->currentText();
+    const QString selectedRarity = rarityFilter->currentText();
 
-    for (const Item &item : allItems) {
-        bool matchSearch = item.name.toLower().contains(search) || item.nameEng.toLower().contains(search);
-        
-        bool matchType = (typeSel == "Все типы") || item.type.contains(typeSel, Qt::CaseInsensitive); // Contains allow partial match
-        bool matchRarity = (raritySel == "Все редкости") || (item.rarity == raritySel);
+    for (const Item &item : std::as_const(allItems)) {
+        const bool matchesSearch = item.name.toLower().contains(search)
+            || item.nameEng.toLower().contains(search);
+        const bool matchesType =
+            selectedType == QStringLiteral("Все типы")
+            || item.type.contains(selectedType, Qt::CaseInsensitive);
+        const bool matchesRarity =
+            selectedRarity == QStringLiteral("Все редкости")
+            || item.rarity == selectedRarity;
 
-        if (matchSearch && matchType && matchRarity) {
-            QListWidgetItem *listItem = new QListWidgetItem(item.name);
-            // Store index or ID in data? simpler to just store pointer or find by name.
-            // Let's store ID if we had it, or just use the index in "filtered" list?
-            // Safer: Store ID in UserRole
+        if (matchesSearch && matchesType && matchesRarity) {
+            auto *listItem = new QListWidgetItem(item.name, itemList);
             listItem->setData(Qt::UserRole, item.id);
-            itemList->addItem(listItem);
         }
     }
 }
 
 void ItemBookWidget::onItemSelected(QListWidgetItem *listWidgetItem)
 {
-    int id = listWidgetItem->data(Qt::UserRole).toInt();
-    
-    // Find item by ID
+    if (!listWidgetItem) {
+        return;
+    }
+
+    const int id = listWidgetItem->data(Qt::UserRole).toInt();
     Item selectedItem;
-    for(const auto& item : allItems) {
-        if(item.id == id) {
+    for (const Item &item : std::as_const(allItems)) {
+        if (item.id == id) {
             selectedItem = item;
             break;
         }
     }
 
-    if (selectedItem.name.isEmpty()) return; // Not found?
+    if (selectedItem.name.isEmpty()) {
+        return;
+    }
 
-    nameLabel->setText(selectedItem.name + (selectedItem.nameEng.isEmpty() ? "" : " (" + selectedItem.nameEng + ")"));
-    typeLabel->setText("Тип: " + selectedItem.type);
-    rarityLabel->setText("Редкость: " + selectedItem.rarity);
-    costLabel->setText("Цена: " + selectedItem.cost);
-    weightLabel->setText("Вес: " + selectedItem.weight);
+    nameLabel->setText(selectedItem.name + (selectedItem.nameEng.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(selectedItem.nameEng)));
+    typeLabel->setText(QStringLiteral("Тип: %1").arg(selectedItem.type));
+    rarityLabel->setText(QStringLiteral("Редкость: %1").arg(selectedItem.rarity));
+    costLabel->setText(QStringLiteral("Цена: %1").arg(selectedItem.cost));
+    weightLabel->setText(QStringLiteral("Вес: %1").arg(selectedItem.weight));
     descriptionText->setHtml(selectedItem.description);
 }

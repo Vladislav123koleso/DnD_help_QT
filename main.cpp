@@ -1,12 +1,14 @@
 #include <QApplication>
 #include "mainwindow.h"
 #include "databasemanager.h"
+#include "apptheme.h"
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     app.setOrganizationName(QStringLiteral("DnD_help"));
     app.setApplicationName(QStringLiteral("DnD_help"));
+    AppTheme::apply(app);
 
     // Инициализация базы данных
     if (DatabaseManager::instance().connectToDatabase()) {

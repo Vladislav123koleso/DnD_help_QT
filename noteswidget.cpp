@@ -1,4 +1,4 @@
-#include "noteswidget.h"
+﻿#include "noteswidget.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -19,6 +19,7 @@
 #include <QUuid>
 #include <QColorDialog>
 #include <QPalette>
+#include <QSizePolicy>
 
 namespace {
 
@@ -75,6 +76,7 @@ Note noteFromJson(const QJsonObject &o)
 NotesWidget::NotesWidget(QWidget *parent)
     : QWidget(parent), isLoading(false)
 {
+    setObjectName(QStringLiteral("NotesWidget"));
     setupUi();
 
     saveDebounceTimer = new QTimer(this);
@@ -176,31 +178,24 @@ void NotesWidget::schedulePersistToDisk()
 void NotesWidget::setupUi()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(8);
 
-    // Toolbar с кнопками форматирования
     setupToolbar();
 
-    // Основной контент - сплиттер
-    QSplitter *splitter = new QSplitter(Qt::Horizontal);
+    QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setChildrenCollapsible(false);
 
-    // Левая часть - список заметок
     QWidget *leftWidget = new QWidget();
     QVBoxLayout *leftLayout = new QVBoxLayout(leftWidget);
-    leftLayout->setContentsMargins(5, 5, 5, 5);
+    leftLayout->setContentsMargins(8, 8, 8, 8);
+    leftLayout->setSpacing(8);
 
-    QLabel *notesLabel = new QLabel("Заметки:");
-    notesLabel->setStyleSheet("font-weight: bold;");
+    QLabel *notesLabel = new QLabel(QStringLiteral("Заметки:"));
+    notesLabel->setProperty("role", QStringLiteral("accent"));
     leftLayout->addWidget(notesLabel);
 
     notesList = new QListWidget();
-    notesList->setStyleSheet(
-        "QListWidget { border: 1px solid #ccc; border-radius: 4px; }"
-        "QListWidget::item { padding: 8px; border-bottom: 1px solid #e0e0e0; }"
-        "QListWidget::item:selected { background-color: #3498db; color: white; }"
-        "QListWidget::item:hover { background-color: #ecf0f1; }"
-    );
     connect(notesList, &QListWidget::itemSelectionChanged, this, [this]() {
         if (!isLoading && notesList->currentItem()) {
             saveCurrentNote();
@@ -209,106 +204,77 @@ void NotesWidget::setupUi()
     });
     leftLayout->addWidget(notesList, 1);
 
-    // Кнопки создания и удаления
     QHBoxLayout *buttonLayout = new QHBoxLayout();
-    newNoteBtn = new QPushButton("+ Новая заметка");
-    newNoteBtn->setStyleSheet(
-        "QPushButton { background-color: #27ae60; color: white; border: none; border-radius: 4px; padding: 8px; font-weight: bold; }"
-        "QPushButton:hover { background-color: #229954; }"
-        "QPushButton:pressed { background-color: #1e8449; }"
-    );
+    newNoteBtn = new QPushButton(QStringLiteral("+ Новая заметка"));
+    newNoteBtn->setProperty("variant", QStringLiteral("accent"));
     connect(newNoteBtn, &QPushButton::clicked, this, &NotesWidget::createNewNote);
     buttonLayout->addWidget(newNoteBtn);
 
-    deleteNoteBtn = new QPushButton("- Удалить");
-    deleteNoteBtn->setStyleSheet(
-        "QPushButton { background-color: #e74c3c; color: white; border: none; border-radius: 4px; padding: 8px; font-weight: bold; }"
-        "QPushButton:hover { background-color: #c0392b; }"
-        "QPushButton:pressed { background-color: #a93226; }"
-    );
+    deleteNoteBtn = new QPushButton(QStringLiteral("- Удалить"));
+    deleteNoteBtn->setProperty("role", QStringLiteral("danger"));
     deleteNoteBtn->setEnabled(false);
     connect(deleteNoteBtn, &QPushButton::clicked, this, &NotesWidget::deleteCurrentNote);
     buttonLayout->addWidget(deleteNoteBtn);
-    
+
     leftLayout->addLayout(buttonLayout);
-    leftWidget->setMaximumWidth(250);
+    leftWidget->setMinimumWidth(220);
+    leftWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     splitter->addWidget(leftWidget);
 
-    // Правая часть — редактор (шрифт как у приложения по умолчанию)
     editor = new QTextEdit();
     editor->setFont(font());
-    editor->setStyleSheet(
-        "QTextEdit { border: 1px solid #555; border-radius: 4px; padding: 10px; "
-        "background-color: #2b2b2b; color: #ececec; }"
-    );
     editor->setAcceptRichText(true);
     connect(editor, &QTextEdit::textChanged, this, &NotesWidget::onNoteEdited);
-    
+
     splitter->addWidget(editor);
     splitter->setStretchFactor(0, 1);
-    splitter->setStretchFactor(1, 2);
+    splitter->setStretchFactor(1, 3);
+    splitter->setSizes({300, 900});
 
-    mainLayout->addWidget(splitter);
+    mainLayout->addWidget(splitter, 1);
 }
-
 void NotesWidget::setupToolbar()
 {
     QToolBar *toolbar = new QToolBar();
-    toolbar->setIconSize(QSize(16, 16));
-    toolbar->setStyleSheet(
-        "QToolBar { background-color: #3a3a3a; color: #ececec; border-bottom: 1px solid #555; padding: 6px; spacing: 4px; }"
-        "QToolButton { background-color: #4a4a4a; color: #f5f5f5; border: 1px solid #666; border-radius: 4px; "
-        "padding: 6px 10px; margin: 2px; min-width: 28px; }"
-        "QToolButton:hover { background-color: #5a5a5a; border-color: #777; }"
-        "QToolButton:pressed { background-color: #3498db; color: #fff; border-color: #2980b9; }"
-        "QToolButton:checked { background-color: #2d6da3; color: #fff; border-color: #3498db; }"
-        "QSpinBox { background-color: #4a4a4a; color: #ececec; border: 1px solid #666; border-radius: 4px; "
-        "padding: 4px 8px; min-height: 26px; selection-background-color: #3498db; }"
-        "QSpinBox::up-button, QSpinBox::down-button { background-color: #555; width: 18px; border: 1px solid #666; }"
-        "QSpinBox::up-button:hover, QSpinBox::down-button:hover { background-color: #666; }"
-    );
+    toolbar->setIconSize(QSize(18, 18));
 
-    // Жирный
     boldBtn = new QToolButton();
-    boldBtn->setText("Ж");
-    boldBtn->setFont(QFont("Arial", 10, QFont::Bold));
-    boldBtn->setToolTip("Жирный (Ctrl+B)");
+    boldBtn->setText(QStringLiteral("B"));
+    boldBtn->setFont(QFont(QStringLiteral("Arial"), 10, QFont::Bold));
+    boldBtn->setToolTip(QStringLiteral("Жирный (Ctrl+B)"));
     boldBtn->setCheckable(true);
     connect(boldBtn, &QToolButton::clicked, this, &NotesWidget::applyBold);
     toolbar->addWidget(boldBtn);
 
-    // Курсив
     italicBtn = new QToolButton();
-    italicBtn->setText("К");
+    italicBtn->setText(QStringLiteral("I"));
     QFont italicFont = italicBtn->font();
     italicFont.setItalic(true);
     italicBtn->setFont(italicFont);
-    italicBtn->setToolTip("Курсив (Ctrl+I)");
+    italicBtn->setToolTip(QStringLiteral("Курсив (Ctrl+I)"));
     italicBtn->setCheckable(true);
     connect(italicBtn, &QToolButton::clicked, this, &NotesWidget::applyItalic);
     toolbar->addWidget(italicBtn);
 
-    // Подчеркивание
     underlineBtn = new QToolButton();
-    underlineBtn->setText("П");
+    underlineBtn->setText(QStringLiteral("U"));
     QFont underlineFont = underlineBtn->font();
     underlineFont.setUnderline(true);
     underlineBtn->setFont(underlineFont);
-    underlineBtn->setToolTip("Подчеркивание (Ctrl+U)");
+    underlineBtn->setToolTip(QStringLiteral("Подчеркивание (Ctrl+U)"));
     underlineBtn->setCheckable(true);
     connect(underlineBtn, &QToolButton::clicked, this, &NotesWidget::applyUnderline);
     toolbar->addWidget(underlineBtn);
 
     toolbar->addSeparator();
 
-    // Размер шрифта
     fontSizeSpinBox = new QSpinBox();
     fontSizeSpinBox->setMinimum(8);
     fontSizeSpinBox->setMaximum(72);
     fontSizeSpinBox->setValue(11);
-    fontSizeSpinBox->setMinimumWidth(88);
-    fontSizeSpinBox->setMaximumWidth(120);
+    fontSizeSpinBox->setMinimumWidth(82);
+    fontSizeSpinBox->setMaximumWidth(110);
     fontSizeSpinBox->setToolTip(QStringLiteral("Размер шрифта"));
     connect(fontSizeSpinBox, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
             this, &NotesWidget::changeFontSize);
@@ -316,19 +282,17 @@ void NotesWidget::setupToolbar()
 
     toolbar->addSeparator();
 
-    // Цвет текста
     colorBtn = new QToolButton();
-    colorBtn->setText("A");
-    colorBtn->setToolTip("Цвет текста");
-    QFont colorFont("Arial", 10, QFont::Bold);
+    colorBtn->setText(QStringLiteral("A"));
+    colorBtn->setToolTip(QStringLiteral("Цвет текста"));
+    QFont colorFont(QStringLiteral("Arial"), 10, QFont::Bold);
     colorBtn->setFont(colorFont);
     connect(colorBtn, &QToolButton::clicked, this, &NotesWidget::changeTextColor);
     toolbar->addWidget(colorBtn);
 
-    // Цвет фона
     bgColorBtn = new QToolButton();
-    bgColorBtn->setText("◼");
-    bgColorBtn->setToolTip("Цвет выделения");
+    bgColorBtn->setText(QStringLiteral("▨"));
+    bgColorBtn->setToolTip(QStringLiteral("Цвет выделения"));
     connect(bgColorBtn, &QToolButton::clicked, this, &NotesWidget::changeBackgroundColor);
     toolbar->addWidget(bgColorBtn);
 
@@ -337,7 +301,6 @@ void NotesWidget::setupToolbar()
         mainLayout->insertWidget(0, toolbar);
     }
 }
-
 void NotesWidget::createNewNote()
 {
     bool ok;
@@ -653,3 +616,4 @@ void NotesWidget::saveCurrentNote()
     }
     persistNotesToDisk();
 }
+

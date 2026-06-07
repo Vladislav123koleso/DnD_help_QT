@@ -1,18 +1,24 @@
 #include "masterpage.h"
-#include <QVBoxLayout>
+
+#include "artifactgeneratorwidget.h"
+#include "bestiarywidget.h"
+#include "itembookwidget.h"
+#include "namegeneratorwidget.h"
+#include "spellbookwidget.h"
+
+#include <QAction>
+#include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QPushButton>
-#include <QToolButton>
-#include <QMenu>
 #include <QListWidget>
+#include <QMenu>
+#include <QPushButton>
+#include <QSizePolicy>
+#include <QSplitter>
 #include <QStackedWidget>
-#include "spellbookwidget.h"
-#include "itembookwidget.h"
-#include "bestiarywidget.h"
-#include "noteswidget.h"
-#include "namegeneratorwidget.h"
-#include "artifactgeneratorwidget.h"
+#include <QToolButton>
+#include <QVBoxLayout>
+#include <QWidget>
 
 MasterPage::MasterPage(QWidget *parent) : QWidget(parent)
 {
@@ -36,98 +42,104 @@ void MasterPage::setCampaign(const QString &campaignName)
 
 void MasterPage::setupUi()
 {
-    QHBoxLayout *mainLayout = new QHBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
+    setObjectName(QStringLiteral("MasterPage"));
 
-    QWidget *leftPanel = new QWidget(this);
-    leftPanel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+    auto *mainLayout = new QHBoxLayout(this);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(8);
 
-    QVBoxLayout *leftLayout = new QVBoxLayout(leftPanel);
-    leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(0);
+    auto *shellSplitter = new QSplitter(Qt::Horizontal, this);
+    shellSplitter->setChildrenCollapsible(false);
 
-    QPushButton *toggleBtn = new QPushButton(QStringLiteral("◀"), this);
-    toggleBtn->setFixedSize(40, 40);
-    toggleBtn->setStyleSheet(
-        "QPushButton { font-size: 18px; font-weight: bold; border: none; background-color: #333; color: white; }"
-        "QPushButton:hover { background-color: #444; }"
-        "QToolTip { font-size: 12px; font-weight: normal; }"
-    );
-    toggleBtn->setToolTip(QStringLiteral("Свернуть/Развернуть меню"));
+    auto *leftPanel = new QWidget(shellSplitter);
+    leftPanel->setObjectName(QStringLiteral("SidebarPanel"));
+    leftPanel->setProperty("sidebarCollapsed", false);
+    leftPanel->setMinimumWidth(210);
+    leftPanel->setMaximumWidth(340);
+    leftPanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
+    auto *leftLayout = new QVBoxLayout(leftPanel);
+    leftLayout->setContentsMargins(8, 8, 8, 8);
+    leftLayout->setSpacing(8);
+
+    auto *toggleBtn = new QPushButton(QStringLiteral("\u25C0"), leftPanel);
+    toggleBtn->setObjectName(QStringLiteral("SidebarToggleBtn"));
+    toggleBtn->setToolTip(QStringLiteral("Свернуть/развернуть меню"));
+    toggleBtn->setFixedSize(34, 34);
     leftLayout->addWidget(toggleBtn, 0, Qt::AlignLeft);
 
-    navBar = new QListWidget(this);
-    navBar->setFixedWidth(180);
-    navBar->setStyleSheet(
-        "QListWidget { border: none; background-color: #2b2b2b; color: #e0e0e0; outline: none; }"
-        "QListWidget::item { padding: 12px; border-bottom: 1px solid #3d3d3d; }"
-        "QListWidget::item:selected { background-color: #404040; color: #ffffff; border-left: 3px solid #3498db; }"
-        "QListWidget::item:hover { background-color: #353535; }"
-    );
+    navBar = new QListWidget(leftPanel);
+    navBar->setObjectName(QStringLiteral("SidebarNav"));
+    navBar->setMinimumWidth(194);
+    navBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     leftLayout->addWidget(navBar, 1);
-    leftLayout->addStretch(0);
+    leftLayout->addStretch(1);
 
-    connect(toggleBtn, &QPushButton::clicked, [this, toggleBtn]() {
+    connect(toggleBtn, &QPushButton::clicked, [this, toggleBtn, leftPanel]() {
         const bool isVisible = navBar->isVisible();
         navBar->setVisible(!isVisible);
-        toggleBtn->setText(isVisible ? QStringLiteral("▶") : QStringLiteral("◀"));
+        leftPanel->setProperty("sidebarCollapsed", isVisible);
+        if (isVisible) {
+            leftPanel->setMinimumWidth(54);
+            leftPanel->setMaximumWidth(64);
+        } else {
+            const bool tight = window() && window()->property("uxTight").toBool();
+            leftPanel->setMinimumWidth(tight ? 170 : 210);
+            leftPanel->setMaximumWidth(tight ? 260 : 340);
+        }
+        toggleBtn->setText(isVisible ? QStringLiteral("\u25B6") : QStringLiteral("\u25C0"));
     });
 
-    mainLayout->addWidget(leftPanel);
+    auto *rightPanel = new QWidget(shellSplitter);
+    rightPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    auto *rightLayout = new QVBoxLayout(rightPanel);
+    rightLayout->setContentsMargins(8, 8, 8, 8);
+    rightLayout->setSpacing(8);
 
-    QWidget *rightPanel = new QWidget(this);
-    QVBoxLayout *rightLayout = new QVBoxLayout(rightPanel);
-    rightLayout->setContentsMargins(0, 0, 0, 0);
-    rightLayout->setSpacing(0);
+    auto *topBar = new QHBoxLayout();
+    topBar->addStretch(1);
 
-    QHBoxLayout *topBar = new QHBoxLayout();
-    topBar->addStretch();
-
-    QToolButton *menuBtn = new QToolButton(this);
-    menuBtn->setText(QStringLiteral("☰"));
+    auto *menuBtn = new QToolButton(rightPanel);
+    menuBtn->setObjectName(QStringLiteral("SidebarMenuBtn"));
+    menuBtn->setText(QStringLiteral("\u2630"));
     menuBtn->setAutoRaise(true);
     menuBtn->setPopupMode(QToolButton::InstantPopup);
     menuBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    menuBtn->setFixedSize(40, 40);
+    menuBtn->setFixedSize(34, 34);
     QFont btnFont = menuBtn->font();
-    btnFont.setPointSize(14);
+    btnFont.setPointSize(13);
+    btnFont.setBold(true);
     menuBtn->setFont(btnFont);
 
-    QMenu *menu = new QMenu(this);
-    menu->addAction(QStringLiteral("Option 1"));
-    menu->addAction(QStringLiteral("Option 2"));
-    menu->addSeparator();
+    auto *menu = new QMenu(menuBtn);
     QAction *mainMenuAction = menu->addAction(QStringLiteral("Главное меню"));
-
     menuBtn->setMenu(menu);
     connect(mainMenuAction, &QAction::triggered, this, &MasterPage::mainMenuRequested);
 
     topBar->addWidget(menuBtn);
-    topBar->setContentsMargins(0, 0, 10, 0);
     rightLayout->addLayout(topBar);
 
-    contentStack = new QStackedWidget(this);
+    contentStack = new QStackedWidget(rightPanel);
 
     const QStringList tabNames = {
         QStringLiteral("Заметки"),
         QStringLiteral("Создание NPC"),
-        QStringLiteral("Список Созданных НПС"),
-        QStringLiteral("Список Заклинаний"),
-        QStringLiteral("Список Предметов"),
-        QStringLiteral("Список Оружия и доспехов"),
+        QStringLiteral("Список созданных НПС"),
+        QStringLiteral("Список заклинаний"),
+        QStringLiteral("Список предметов"),
+        QStringLiteral("Список оружия и доспехов"),
         QStringLiteral("Бестиарий"),
-        QStringLiteral("Генератор Названий\\Имен"),
-        QStringLiteral("Генератор Артефактов")
+        QStringLiteral("Генератор названий/имен"),
+        QStringLiteral("Генератор артефактов")
     };
 
     for (int tabIndex = 0; tabIndex < tabNames.size(); ++tabIndex) {
-        const QString &name = tabNames.at(tabIndex);
-        navBar->addItem(name);
+        navBar->addItem(tabNames.at(tabIndex));
 
-        QWidget *page = new QWidget();
-        QVBoxLayout *pageLayout = new QVBoxLayout(page);
+        auto *page = new QWidget();
+        auto *pageLayout = new QVBoxLayout(page);
+        pageLayout->setContentsMargins(0, 0, 0, 0);
+        pageLayout->setSpacing(0);
 
         if (tabIndex == 0) {
             notesWidget = new NotesWidget(this);
@@ -153,7 +165,7 @@ void MasterPage::setupUi()
             artifactGeneratorWidget = new ArtifactGeneratorWidget(this);
             pageLayout->addWidget(artifactGeneratorWidget);
         } else {
-            QLabel *label = new QLabel(name + QStringLiteral(" Placeholder"));
+            auto *label = new QLabel(tabNames.at(tabIndex), page);
             label->setAlignment(Qt::AlignCenter);
             pageLayout->addWidget(label);
         }
@@ -161,7 +173,7 @@ void MasterPage::setupUi()
         contentStack->addWidget(page);
     }
 
-    rightLayout->addWidget(contentStack);
+    rightLayout->addWidget(contentStack, 1);
 
     connect(navBar, &QListWidget::currentRowChanged, contentStack, &QStackedWidget::setCurrentIndex);
 
@@ -169,5 +181,11 @@ void MasterPage::setupUi()
         navBar->setCurrentRow(0);
     }
 
-    mainLayout->addWidget(rightPanel);
+    shellSplitter->addWidget(leftPanel);
+    shellSplitter->addWidget(rightPanel);
+    shellSplitter->setStretchFactor(0, 0);
+    shellSplitter->setStretchFactor(1, 1);
+    shellSplitter->setSizes({240, 1080});
+
+    mainLayout->addWidget(shellSplitter, 1);
 }

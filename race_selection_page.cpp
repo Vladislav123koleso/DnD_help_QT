@@ -1,4 +1,4 @@
-#include "race_selection_page.h"
+﻿#include "race_selection_page.h"
 #include <QEvent>
 #include <QEnterEvent>
 #include <QPixmap>
@@ -11,6 +11,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <algorithm>
 
 #include "flowlayout.h"
@@ -18,6 +19,157 @@
 // ---------------------------------------------------------
 
 namespace {
+
+QString normalizeAsciiToken(const QString &raw)
+{
+    QString token = raw.trimmed().toLower();
+    token.replace(QStringLiteral("С‘"), QStringLiteral("Рµ"));
+
+    static const QMap<QChar, QString> translit = {
+        {QChar(0x0430), "a"}, {QChar(0x0431), "b"},  {QChar(0x0432), "v"}, {QChar(0x0433), "g"},
+        {QChar(0x0434), "d"}, {QChar(0x0435), "e"},  {QChar(0x0436), "zh"},{QChar(0x0437), "z"},
+        {QChar(0x0438), "i"}, {QChar(0x0439), "y"},  {QChar(0x043a), "k"}, {QChar(0x043b), "l"},
+        {QChar(0x043c), "m"}, {QChar(0x043d), "n"},  {QChar(0x043e), "o"}, {QChar(0x043f), "p"},
+        {QChar(0x0440), "r"}, {QChar(0x0441), "s"},  {QChar(0x0442), "t"}, {QChar(0x0443), "u"},
+        {QChar(0x0444), "f"}, {QChar(0x0445), "h"},  {QChar(0x0446), "ts"},{QChar(0x0447), "ch"},
+        {QChar(0x0448), "sh"},{QChar(0x0449), "sch"},{QChar(0x044a), ""},  {QChar(0x044b), "y"},
+        {QChar(0x044c), ""},  {QChar(0x044d), "e"},  {QChar(0x044e), "yu"},{QChar(0x044f), "ya"}
+    };
+
+    QString out;
+    out.reserve(token.size() * 2);
+    for (QChar ch : token) {
+        const ushort u = ch.unicode();
+        if ((u >= 'a' && u <= 'z') || (u >= '0' && u <= '9')) {
+            out.append(ch);
+            continue;
+        }
+        if (translit.contains(ch)) {
+            out.append(translit.value(ch));
+        }
+    }
+    return out;
+}
+
+QString slugToken(const QString &slug)
+{
+    QString token = slug.trimmed().toLower();
+    if (token.isEmpty()) {
+        return QString();
+    }
+    if (token.contains('/')) {
+        token = token.section('/', -1);
+    }
+    token.remove(QRegularExpression(QStringLiteral("^\\d+-")));
+    token.replace(QLatin1Char('-'), QLatin1Char('_'));
+    token.replace(QLatin1Char(' '), QLatin1Char('_'));
+    return token;
+}
+
+QString resolveRacesImagesBaseDir()
+{
+    QStringList candidates;
+    candidates << QStringLiteral("images/races");
+    candidates << QDir::current().filePath(QStringLiteral("images/races"));
+
+    QDir appDir(QCoreApplication::applicationDirPath());
+    candidates << appDir.filePath(QStringLiteral("images/races"));
+
+    QDir dir = appDir;
+    for (int i = 0; i < 8; ++i) {
+        candidates << dir.filePath(QStringLiteral("images/races"));
+        if (!dir.cdUp()) {
+            break;
+        }
+    }
+
+    for (const QString &candidate : candidates) {
+        QDir d(candidate);
+        if (d.exists()) {
+            return d.absolutePath();
+        }
+    }
+    return QString();
+}
+
+QString pickRaceImagePath(const QString &baseDir, const QString &raceName, const QString &raceSlug, int state)
+{
+    if (baseDir.isEmpty()) {
+        return QString();
+    }
+
+    const int stateSuffix = (state == 2) ? 2 : 1;
+    const QDir dir(baseDir);
+    const QStringList exts = {QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("webp")};
+
+    QStringList tokens;
+    const QString tokenFromSlug = slugToken(raceSlug);
+    if (!tokenFromSlug.isEmpty()) {
+        tokens << tokenFromSlug;
+    }
+    tokens << normalizeAsciiToken(raceName);
+
+    const QMap<QString, QStringList> aliases = {
+        {QStringLiteral("aarakocra"), {QStringLiteral("aaracocra")}},
+        {QStringLiteral("autognome"), {QStringLiteral("autognom")}},
+        {QStringLiteral("astral_elf"), {QStringLiteral("astralelf")}},
+        {QStringLiteral("astralelf"), {QStringLiteral("astral_elf")}},
+        {QStringLiteral("bugbear"), {QStringLiteral("bagbir")}}
+    };
+    const QString normalizedSlug = normalizeAsciiToken(tokenFromSlug);
+    if (aliases.contains(tokenFromSlug)) {
+        tokens << aliases.value(tokenFromSlug);
+    }
+    if (!normalizedSlug.isEmpty() && aliases.contains(normalizedSlug)) {
+        tokens << aliases.value(normalizedSlug);
+    }
+
+    for (const QString &token : std::as_const(tokens)) {
+        if (token.trimmed().isEmpty()) {
+            continue;
+        }
+        const QString base = token.toLower();
+        const QString normalized = normalizeAsciiToken(base);
+        QStringList variants = {base, base};
+        variants[1].replace(QLatin1Char('-'), QLatin1Char('_'));
+        if (!normalized.isEmpty() && !variants.contains(normalized)) {
+            variants << normalized;
+        }
+
+        for (const QString &variant : std::as_const(variants)) {
+            for (const QString &ext : exts) {
+                const QString candidate = dir.filePath(QStringLiteral("%1_%2.%3").arg(variant).arg(stateSuffix).arg(ext));
+                if (QFile::exists(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+    }
+
+    const QString wanted = !normalizedSlug.isEmpty() ? normalizedSlug : normalizeAsciiToken(raceName);
+    const QFileInfoList files = dir.entryInfoList(QStringList() << QStringLiteral("*_%1.*").arg(stateSuffix), QDir::Files);
+    for (const QFileInfo &fi : files) {
+        QString stem = fi.completeBaseName();
+        if (stem.endsWith(QStringLiteral("_1")) || stem.endsWith(QStringLiteral("_2"))) {
+            stem.chop(2);
+        }
+        if (normalizeAsciiToken(stem) == wanted) {
+            return fi.absoluteFilePath();
+        }
+    }
+
+    return QString();
+}
+
+QString resolveRaceHoverImagePath(const QString &raceName, const QString &raceSlug, const QString &normalPath)
+{
+    const QString baseDir = resolveRacesImagesBaseDir();
+    const QString hover = pickRaceImagePath(baseDir, raceName, raceSlug, 2);
+    if (!hover.isEmpty()) {
+        return hover;
+    }
+    return normalPath;
+}
 
 QString selectionCardDescription(const Race &race)
 {
@@ -87,7 +239,7 @@ public:
             RaceCard *card = new RaceCard(
                 race.name,
                 race.imagePath,
-                race.imagePath,
+                resolveRaceHoverImagePath(race.name, race.slug, race.imagePath),
                 cardDescription,
                 scrollContent);
             connect(card, &RaceCard::raceSelected, this, [this, subraceName](const QString &) {
@@ -187,7 +339,7 @@ void RaceSelectionPage::loadRaceData()
         race.flyingSpeed = obj.value("flyingSpeed").toInt(0);
         race.hasSize = obj.contains("size");
         race.size = obj.value("size").toString("Средний");
-        race.imagePath = detectImagePath(race.name);
+        race.imagePath = detectImagePath(race.name, race.slug, 1);
 
         const QJsonObject asi = obj.value("asi").toObject();
         race.hasAbilityScoreIncrease = obj.contains("asi") && !asi.isEmpty();
@@ -281,42 +433,10 @@ QString RaceSelectionPage::resolveSubracesMapPath() const
     return "data/subraces_map.json";
 }
 
-QString RaceSelectionPage::detectImagePath(const QString &raceName) const
+QString RaceSelectionPage::detectImagePath(const QString &raceName, const QString &raceSlug, int state) const
 {
-    QString basePath;
-    QDir dir(QCoreApplication::applicationDirPath());
-    for (int i = 0; i < 6; ++i) {
-        if (dir.exists("DndHelperDesign/DndHelperDesignContent/images/race")) {
-            basePath = dir.filePath("DndHelperDesign/DndHelperDesignContent/images/race/");
-            break;
-        }
-        if (!dir.cdUp()) break;
-    }
-    
-    if (basePath.isEmpty()) {
-        basePath = "DndHelperDesign/DndHelperDesignContent/images/race/";
-    }
-
-    const QMap<QString, QString> explicitMap = {
-        {"Эльф", "elf.jpg"},
-        {"Человек", "human.jpg"},
-        {"Гном", "gnome.jpg"},
-        {"Ааракокра", "aarakocra.jpg"}
-    };
-
-    if (explicitMap.contains(raceName)) {
-        const QString path = basePath + explicitMap.value(raceName);
-        if (QFile::exists(path)) {
-            return path;
-        }
-    }
-
-    const QString fallback = basePath + "human.jpg";
-    if (QFile::exists(fallback)) {
-        return fallback;
-    }
-
-    return QString();
+    const QString baseDir = resolveRacesImagesBaseDir();
+    return pickRaceImagePath(baseDir, raceName, raceSlug, state);
 }
 
 QString RaceSelectionPage::shortDescription(const Race &race) const
@@ -566,7 +686,7 @@ void RaceSelectionPage::setupUi() {
     for (const QString &raceName : raceNames) {
         const Race race = raceData.value(raceName);
         const QString normalImage = race.imagePath;
-        const QString hoverImage = race.imagePath;
+        const QString hoverImage = resolveRaceHoverImagePath(race.name, race.slug, normalImage);
         RaceCard *card = new RaceCard(raceName, normalImage, hoverImage, shortDescription(race), scrollContent);
         connect(card, &RaceCard::raceSelected, this, [this](const QString &name){ onRaceSelected(name); });
         contentLayout->addWidget(card);
@@ -638,5 +758,4 @@ Race RaceSelectionPage::getRaceData(const QString &name)
     }
     return Race();
 }
-
 

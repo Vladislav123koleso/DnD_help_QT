@@ -12,6 +12,7 @@ namespace Ui {
 class MainWindow;
 }
 QT_END_NAMESPACE
+class QResizeEvent;
 
 class MainWindow : public QMainWindow
 {
@@ -21,15 +22,22 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
 private slots:
     void onCampaignSelected(const QString &campaignName, bool isMaster);
     void onMainMenuRequested();
 
 private:
+    void applyResponsiveUi(bool force = false);
+
     Ui::MainWindow *ui;
     QStackedWidget *stackedWidget;
     StartPage *startPage;
     PlayerPage *playerPage;
     MasterPage *masterPage;
+    bool compactUi = false;
+    bool tightUi = false;
 };
 #endif // MAINWINDOW_H

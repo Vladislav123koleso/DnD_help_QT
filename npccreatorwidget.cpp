@@ -30,6 +30,7 @@
 #include <QScrollArea>
 #include <QScreen>
 #include <QSignalBlocker>
+#include <QSizePolicy>
 #include <QSplitter>
 #include <QSpinBox>
 #include <QStandardPaths>
@@ -321,6 +322,7 @@ void showDetailPopup(QWidget *anchorWidget, const QString &title, const QString 
 NpcCreatorWidget::NpcCreatorWidget(QWidget *parent)
     : QWidget(parent)
 {
+    setObjectName(QStringLiteral("NpcCreatorWidget"));
     creationService = new CharacterCreationService(this);
     setupUi();
 
@@ -939,19 +941,25 @@ void NpcCreatorWidget::runCreationWizard()
 void NpcCreatorWidget::setupUi()
 {
     auto *mainLayout = new QHBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(8);
 
     auto *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setChildrenCollapsible(false);
 
     auto *leftPanel = new QWidget(splitter);
+    leftPanel->setMinimumWidth(240);
+    leftPanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     auto *leftLayout = new QVBoxLayout(leftPanel);
-    leftLayout->setContentsMargins(8, 8, 4, 8);
+    leftLayout->setContentsMargins(8, 8, 8, 8);
 
     auto *leftButtons = new QHBoxLayout();
     addNpcBtn = new QPushButton(QStringLiteral("+ NPC"), leftPanel);
-    addFolderBtn = new QPushButton(QStringLiteral("📁"), leftPanel);
+    addNpcBtn->setProperty("variant", QStringLiteral("accent"));
+    addFolderBtn = new QPushButton(QStringLiteral("Папка"), leftPanel);
     addFolderBtn->setToolTip(QStringLiteral("Создать папку"));
-    deleteBtn = new QPushButton(QStringLiteral("✕"), leftPanel);
+    deleteBtn = new QPushButton(QStringLiteral("Удалить"), leftPanel);
+    deleteBtn->setProperty("role", QStringLiteral("danger"));
     deleteBtn->setToolTip(QStringLiteral("Удалить выбранное"));
     leftButtons->addWidget(addNpcBtn);
     leftButtons->addWidget(addFolderBtn);
@@ -968,10 +976,6 @@ void NpcCreatorWidget::setupUi()
     npcTree->setDefaultDropAction(Qt::MoveAction);
     npcTree->setSelectionMode(QAbstractItemView::SingleSelection);
     npcTree->setContextMenuPolicy(Qt::CustomContextMenu);
-    npcTree->setStyleSheet(
-        "QTreeWidget { background-color: #2b2b2b; color: #e8e8e8; border: 1px solid #3d3d3d; }"
-        "QTreeWidget::item { padding: 4px; }"
-        "QTreeWidget::item:selected { background-color: #404040; }");
     leftLayout->addWidget(npcTree, 1);
 
     auto *rightScroll = new QScrollArea(splitter);
@@ -1265,9 +1269,9 @@ void NpcCreatorWidget::setupUi()
 
     splitter->addWidget(leftPanel);
     splitter->addWidget(rightScroll);
-    splitter->setStretchFactor(0, 0);
-    splitter->setStretchFactor(1, 1);
-    splitter->setSizes({260, 900});
+    splitter->setStretchFactor(0, 1);
+    splitter->setStretchFactor(1, 3);
+    splitter->setSizes({320, 960});
 
     mainLayout->addWidget(splitter);
 

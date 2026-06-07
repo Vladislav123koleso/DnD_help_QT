@@ -31,6 +31,7 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QTreeWidget>
@@ -749,10 +750,22 @@ CharacterSheet::~CharacterSheet()
 void CharacterSheet::setupExtendedSections()
 {
     ui->horizontalLayout_Main->setSpacing(8);
+    ui->horizontalLayout_Main->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    ui->verticalLayout_Center->setSpacing(8);
+    ui->verticalLayout_Center->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     ui->gridLayout_Combat->setHorizontalSpacing(8);
     ui->gridLayout_Combat->setVerticalSpacing(4);
-    ui->statsGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
-    ui->combatGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+    const int compactTopGroupWidth = 210;
+    ui->statsGroup->setMinimumWidth(compactTopGroupWidth);
+    ui->statsGroup->setMaximumWidth(compactTopGroupWidth);
+    ui->statsGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Maximum);
+    ui->combatGroup->setMinimumWidth(compactTopGroupWidth);
+    ui->combatGroup->setMaximumWidth(compactTopGroupWidth);
+    ui->combatGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Maximum);
+    ui->horizontalLayout_Main->setStretch(0, 0);
+    ui->horizontalLayout_Main->setStretch(1, 0);
+    ui->verticalLayout_Center->setAlignment(ui->combatGroup, Qt::AlignLeft | Qt::AlignTop);
+    ui->horizontalLayout_Main->addStretch(1);
     ui->appearanceGroup->hide();
     ui->verticalSpacer->changeSize(0, 0, QSizePolicy::Minimum, QSizePolicy::Fixed);
     ui->verticalLayout_Stats->invalidate();
@@ -767,10 +780,15 @@ void CharacterSheet::setupExtendedSections()
 
     detailsTabs = new QTabWidget(this);
     detailsTabs->setDocumentMode(true);
-    ui->verticalLayout->addWidget(detailsTabs, 1);
+    if (QTabBar *detailsTabBar = detailsTabs->tabBar()) {
+        detailsTabBar->setExpanding(false);
+        detailsTabBar->setUsesScrollButtons(true);
+        detailsTabBar->setElideMode(Qt::ElideRight);
+    }
 
     QWidget *historyTab = new QWidget(detailsTabs);
     QVBoxLayout *historyLayout = new QVBoxLayout(historyTab);
+    historyLayout->setContentsMargins(10, 0, 10, 0);
     QGroupBox *historyGroup = new QGroupBox(QStringLiteral("История персонажа"), historyTab);
     QVBoxLayout *historyGroupLayout = new QVBoxLayout(historyGroup);
     historyEdit = new QTextEdit(historyGroup);
@@ -813,7 +831,7 @@ void CharacterSheet::setupExtendedSections()
     detailsTabs->addTab(historyTab, QStringLiteral("История"));
 
     QGroupBox *overviewGroup = new QGroupBox(QStringLiteral("Навыки и спасброски"), this);
-    overviewGroup->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+    overviewGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     QVBoxLayout *overviewLayout = new QVBoxLayout(overviewGroup);
     overviewLayout->setSpacing(8);
 
@@ -901,13 +919,6 @@ void CharacterSheet::setupExtendedSections()
 
     overviewLayout->addLayout(overviewColumnsLayout);
 
-    const int detailsTabsIndex = ui->verticalLayout->indexOf(detailsTabs);
-    if (detailsTabsIndex >= 0) {
-        ui->verticalLayout->insertWidget(detailsTabsIndex, overviewGroup);
-    } else {
-        ui->verticalLayout->addWidget(overviewGroup);
-    }
-
     QWidget *spellTab = new QWidget(detailsTabs);
     QVBoxLayout *spellLayout = new QVBoxLayout(spellTab);
 
@@ -932,7 +943,6 @@ void CharacterSheet::setupExtendedSections()
     QHBoxLayout *spellFilterLayout = new QHBoxLayout();
 
     spellClassFilter = new QComboBox(spellListGroup);
-    spellClassFilter->addItem(QStringLiteral("Все классы"), QString());
     spellLevelFilter = new QComboBox(spellListGroup);
     spellLevelFilter->addItem(QStringLiteral("Все уровни"), -1);
     spellLevelFilter->addItem(QStringLiteral("Заговор"), 0);
@@ -946,8 +956,6 @@ void CharacterSheet::setupExtendedSections()
     spellSearchEdit = new QLineEdit(spellListGroup);
     spellSearchEdit->setPlaceholderText(QStringLiteral("Поиск по названию, школе или описанию..."));
 
-    spellFilterLayout->addWidget(new QLabel(QStringLiteral("Класс:"), spellListGroup));
-    spellFilterLayout->addWidget(spellClassFilter);
     spellFilterLayout->addWidget(new QLabel(QStringLiteral("Уровень:"), spellListGroup));
     spellFilterLayout->addWidget(spellLevelFilter);
     spellFilterLayout->addWidget(new QLabel(QStringLiteral("Состояние:"), spellListGroup));
@@ -1026,7 +1034,14 @@ void CharacterSheet::setupExtendedSections()
     featureDetailsText->setReadOnly(true);
     featuresRightLayout->addWidget(featureDetailsText, 1);
 
-    QGroupBox *listsGroup = new QGroupBox(QStringLiteral("Инвентарь и атаки"), featuresRightWidget);
+    featuresSplitter->setStretchFactor(0, 2);
+    featuresSplitter->setStretchFactor(1, 3);
+    featuresLayout->addWidget(featuresSplitter, 1);
+    detailsTabs->addTab(featuresTab, QStringLiteral("Умения и владения"));
+
+    QWidget *inventoryTab = new QWidget(detailsTabs);
+    QVBoxLayout *inventoryLayout = new QVBoxLayout(inventoryTab);
+    QGroupBox *listsGroup = new QGroupBox(QStringLiteral("Инвентарь и атаки"), inventoryTab);
     QHBoxLayout *listsLayout = new QHBoxLayout(listsGroup);
     inventoryList = new QListWidget(listsGroup);
     attacksList = new QListWidget(listsGroup);
@@ -1034,14 +1049,60 @@ void CharacterSheet::setupExtendedSections()
     attacksList->setAlternatingRowColors(true);
     listsLayout->addWidget(inventoryList, 1);
     listsLayout->addWidget(attacksList, 1);
-    featuresRightLayout->addWidget(listsGroup);
+    inventoryLayout->addWidget(listsGroup, 1);
+    detailsTabs->addTab(inventoryTab, QStringLiteral("Инвентарь"));
 
-    featuresSplitter->setStretchFactor(0, 2);
-    featuresSplitter->setStretchFactor(1, 3);
-    featuresLayout->addWidget(featuresSplitter, 1);
-    detailsTabs->addTab(featuresTab, QStringLiteral("Умения и владения"));
+    QWidget *detailsAreaWidget = new QWidget(this);
+    QHBoxLayout *detailsAreaLayout = new QHBoxLayout(detailsAreaWidget);
+    detailsAreaLayout->setContentsMargins(0, 0, 0, 0);
+    detailsAreaLayout->setSpacing(12);
 
-    connect(spellClassFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CharacterSheet::onSpellFiltersChanged);
+    QWidget *leftColumnWidget = new QWidget(detailsAreaWidget);
+    QVBoxLayout *leftColumnLayout = new QVBoxLayout(leftColumnWidget);
+    leftColumnLayout->setContentsMargins(0, 0, 0, 0);
+    leftColumnLayout->setSpacing(10);
+
+    QWidget *rightColumnWidget = new QWidget(detailsAreaWidget);
+    QVBoxLayout *rightColumnLayout = new QVBoxLayout(rightColumnWidget);
+    rightColumnLayout->setContentsMargins(0, 0, 0, 0);
+    rightColumnLayout->setSpacing(0);
+
+    const int topGroupsSpacing = ui->horizontalLayout_Main->spacing();
+    const int leftColumnWidth = compactTopGroupWidth * 2 + topGroupsSpacing;
+
+    QWidget *topGroupsWidget = new QWidget(leftColumnWidget);
+    QHBoxLayout *topGroupsLayout = new QHBoxLayout(topGroupsWidget);
+    topGroupsLayout->setContentsMargins(0, 0, 0, 0);
+    topGroupsLayout->setSpacing(topGroupsSpacing);
+    topGroupsLayout->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+
+    ui->horizontalLayout_Main->removeWidget(ui->statsGroup);
+    ui->verticalLayout_Center->removeWidget(ui->combatGroup);
+
+    topGroupsLayout->addWidget(ui->statsGroup, 0, Qt::AlignLeft | Qt::AlignTop);
+    topGroupsLayout->addWidget(ui->combatGroup, 0, Qt::AlignLeft | Qt::AlignTop);
+    topGroupsLayout->addStretch(1);
+
+    if (QLayoutItem *oldMainItem = ui->verticalLayout->takeAt(1)) {
+        delete oldMainItem;
+    }
+
+    leftColumnLayout->addWidget(topGroupsWidget, 0);
+    overviewGroup->setMinimumWidth(leftColumnWidth);
+    overviewGroup->setMaximumWidth(leftColumnWidth);
+    overviewGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    leftColumnLayout->addWidget(overviewGroup, 1);
+
+    rightColumnLayout->addWidget(detailsTabs, 1);
+
+    leftColumnWidget->setMinimumWidth(leftColumnWidth);
+    leftColumnWidget->setMaximumWidth(leftColumnWidth);
+    leftColumnWidget->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    rightColumnWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    detailsAreaLayout->addWidget(leftColumnWidget, 0);
+    detailsAreaLayout->addWidget(rightColumnWidget, 1);
+    ui->verticalLayout->addWidget(detailsAreaWidget, 1);
+
     connect(spellLevelFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CharacterSheet::onSpellFiltersChanged);
     connect(spellStateFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CharacterSheet::onSpellFiltersChanged);
     connect(spellSearchEdit, &QLineEdit::textChanged, this, &CharacterSheet::onSpellFiltersChanged);
@@ -1596,12 +1657,15 @@ void CharacterSheet::updateSpellcastingSection()
     {
         QSignalBlocker blocker(spellClassFilter);
         spellClassFilter->clear();
-        spellClassFilter->addItem(QStringLiteral("Все классы"), QString());
         for (const QString &className : classes) {
             spellClassFilter->addItem(className, className);
         }
         const int classIndex = spellClassFilter->findData(previousClassFilter);
-        spellClassFilter->setCurrentIndex(classIndex >= 0 ? classIndex : 0);
+        if (classIndex >= 0) {
+            spellClassFilter->setCurrentIndex(classIndex);
+        } else if (spellClassFilter->count() > 0) {
+            spellClassFilter->setCurrentIndex(0);
+        }
     }
 
     {
@@ -1762,7 +1826,7 @@ void CharacterSheet::rebuildSpellTree()
         return;
     }
 
-    const QString classFilter = spellClassFilter->currentData().toString();
+    const QString classFilter;
     const QVariant levelFilterData = spellLevelFilter->currentData();
     const int levelFilter = levelFilterData.isValid() ? levelFilterData.toInt() : -1;
     const QString stateFilter = spellStateFilter->currentData().toString();

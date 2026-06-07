@@ -1,17 +1,19 @@
 #include "npclistwidget.h"
-#include <QColor>
 
+#include <QColor>
 #include <QDir>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QShowEvent>
 #include <QSignalBlocker>
+#include <QSizePolicy>
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QTextEdit>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -35,50 +37,52 @@ QString sanitizeStorageKey(QString key)
 NpcListWidget::NpcListWidget(QWidget *parent)
     : QWidget(parent)
 {
+    setObjectName(QStringLiteral("NpcListWidget"));
+
     auto *mainLayout = new QHBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(8);
 
     auto *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setChildrenCollapsible(false);
 
     auto *leftPanel = new QWidget(splitter);
+    leftPanel->setMinimumWidth(220);
+    leftPanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     auto *leftLayout = new QVBoxLayout(leftPanel);
-    leftLayout->setContentsMargins(8, 8, 4, 8);
+    leftLayout->setContentsMargins(8, 8, 8, 8);
+    leftLayout->setSpacing(8);
 
     auto *title = new QLabel(QStringLiteral("Созданные NPC"), leftPanel);
-    title->setStyleSheet(QStringLiteral("font-weight: bold; color: #e8e8e8;"));
+    title->setProperty("role", QStringLiteral("accent"));
     leftLayout->addWidget(title);
 
     npcTree = new QTreeWidget(leftPanel);
     npcTree->setHeaderHidden(true);
     npcTree->setSelectionMode(QAbstractItemView::SingleSelection);
-    npcTree->setStyleSheet(
-        "QTreeWidget { background-color: #2b2b2b; color: #e8e8e8; border: 1px solid #3d3d3d; }"
-        "QTreeWidget::item { padding: 4px; }"
-        "QTreeWidget::item:selected { background-color: #404040; }");
     leftLayout->addWidget(npcTree, 1);
 
     auto *rightPanel = new QWidget(splitter);
     auto *rightLayout = new QVBoxLayout(rightPanel);
-    rightLayout->setContentsMargins(4, 8, 8, 8);
+    rightLayout->setContentsMargins(8, 8, 8, 8);
+    rightLayout->setSpacing(8);
 
     auto *summaryTitle = new QLabel(QStringLiteral("Карточка NPC"), rightPanel);
-    summaryTitle->setStyleSheet(QStringLiteral("font-weight: bold; color: #e8e8e8;"));
+    summaryTitle->setProperty("role", QStringLiteral("accent"));
     rightLayout->addWidget(summaryTitle);
 
     summaryView = new QTextEdit(rightPanel);
     summaryView->setReadOnly(true);
     summaryView->setPlaceholderText(QStringLiteral("Выберите NPC в списке слева."));
-    summaryView->setStyleSheet(
-        "QTextEdit { background-color: #2b2b2b; color: #e8e8e8; border: 1px solid #3d3d3d; }");
     rightLayout->addWidget(summaryView, 1);
 
     splitter->addWidget(leftPanel);
     splitter->addWidget(rightPanel);
-    splitter->setStretchFactor(0, 0);
-    splitter->setStretchFactor(1, 1);
-    splitter->setSizes({260, 900});
+    splitter->setStretchFactor(0, 1);
+    splitter->setStretchFactor(1, 2);
+    splitter->setSizes({320, 900});
 
-    mainLayout->addWidget(splitter);
+    mainLayout->addWidget(splitter, 1);
 
     connect(npcTree, &QTreeWidget::itemSelectionChanged, this, &NpcListWidget::onTreeSelectionChanged);
 
@@ -146,7 +150,7 @@ void NpcListWidget::rebuildTree()
         item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
     };
 
-    for (const NpcFolder &folder : folderList) {
+    for (const NpcFolder &folder : std::as_const(folderList)) {
         auto *folderItem = new QTreeWidgetItem(npcTree, {folder.name});
         folderItem->setData(0, RoleKind, static_cast<int>(TreeItemKind::Folder));
         folderItem->setData(0, RoleId, folder.id);
@@ -154,7 +158,7 @@ void NpcListWidget::rebuildTree()
         folderItem->setExpanded(folder.expanded);
 
         QList<NpcEntry> children;
-        for (const NpcEntry &entry : npcs) {
+        for (const NpcEntry &entry : std::as_const(npcs)) {
             if (entry.folderId == folder.id) {
                 children << entry;
             }
@@ -165,13 +169,13 @@ void NpcListWidget::rebuildTree()
             }
             return a.listName.localeAwareCompare(b.listName) < 0;
         });
-        for (const NpcEntry &entry : children) {
+        for (const NpcEntry &entry : std::as_const(children)) {
             appendNpcItem(folderItem, entry);
         }
     }
 
     QList<NpcEntry> rootNpcs;
-    for (const NpcEntry &entry : npcs) {
+    for (const NpcEntry &entry : std::as_const(npcs)) {
         if (entry.folderId.trimmed().isEmpty() || !folders.contains(entry.folderId)) {
             rootNpcs << entry;
         }
@@ -182,16 +186,16 @@ void NpcListWidget::rebuildTree()
         }
         return a.listName.localeAwareCompare(b.listName) < 0;
     });
-    for (const NpcEntry &entry : rootNpcs) {
+    for (const NpcEntry &entry : std::as_const(rootNpcs)) {
         appendNpcItem(nullptr, entry);
     }
 
     if (folders.isEmpty() && npcs.isEmpty()) {
         auto *hint = new QTreeWidgetItem(
             npcTree,
-            {QStringLiteral("Список пуст. Создайте NPC на вкладке «Создание NPC».")});
+            {QStringLiteral("Список пуст. Создайте NPC во вкладке «Создание NPC».")});
         hint->setFlags(Qt::NoItemFlags);
-        hint->setForeground(0, QColor(QStringLiteral("#888888")));
+        hint->setForeground(0, QColor(QStringLiteral("#6c5f52")));
     }
 
     m_loading = false;

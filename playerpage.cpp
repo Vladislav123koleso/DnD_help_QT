@@ -17,6 +17,12 @@
 #include <QLineEdit>
 #include <QSplitter>
 #include <QTextEdit>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFileInfo>
+#include <QListWidgetItem>
+#include <QUrl>
+#include <QCoreApplication>
 #include <algorithm>
 #include "character.h"
 #include "characterprogressionrules.h"
@@ -53,6 +59,125 @@ const QStringList &knownSkillNames()
     };
 
     return skills;
+}
+
+QString resolveMaterialsDirPath()
+{
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QStringList candidates = {
+        QDir::current().absoluteFilePath(QStringLiteral("materials")),
+        QDir(appDir).absoluteFilePath(QStringLiteral("materials")),
+        QDir(appDir).absoluteFilePath(QStringLiteral("../materials")),
+        QDir(appDir).absoluteFilePath(QStringLiteral("../../materials")),
+        QDir(appDir).absoluteFilePath(QStringLiteral("../../../materials"))
+    };
+
+    for (const QString &candidate : candidates) {
+        QDir dir(candidate);
+        if (dir.exists()) {
+            return dir.absolutePath();
+        }
+    }
+
+    return QString();
+}
+
+bool openMaterialByPath(const QString &path, QWidget *parent)
+{
+    const bool opened = QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    if (!opened) {
+        QMessageBox::warning(
+            parent,
+            QStringLiteral("Справочный материал"),
+            QStringLiteral("Не удалось открыть файл:\n%1").arg(QDir::toNativeSeparators(path)));
+    }
+    return opened;
+}
+
+void showReferenceMaterialsDialog(QWidget *parent)
+{
+    const QString materialsDirPath = resolveMaterialsDirPath();
+    if (materialsDirPath.isEmpty()) {
+        QMessageBox::warning(
+            parent,
+            QStringLiteral("Справочный материал"),
+            QStringLiteral("Папка materials не найдена."));
+        return;
+    }
+
+    const QDir materialsDir(materialsDirPath);
+    const QStringList filters = {
+        QStringLiteral("*.pdf"),
+        QStringLiteral("*.doc"),
+        QStringLiteral("*.docx"),
+        QStringLiteral("*.txt"),
+        QStringLiteral("*.md"),
+        QStringLiteral("*.rtf")
+    };
+    const QFileInfoList materials = materialsDir.entryInfoList(
+        filters,
+        QDir::Files | QDir::Readable,
+        QDir::Name | QDir::IgnoreCase);
+
+    if (materials.isEmpty()) {
+        QMessageBox::information(
+            parent,
+            QStringLiteral("Справочный материал"),
+            QStringLiteral("В папке materials пока нет доступных файлов для чтения."));
+        return;
+    }
+
+    QDialog dialog(parent);
+    dialog.setWindowTitle(QStringLiteral("Справочный материал"));
+    dialog.resize(760, 520);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+
+    QLabel *hintLabel = new QLabel(QStringLiteral("Выберите материал и нажмите «Открыть»:"), &dialog);
+    layout->addWidget(hintLabel);
+
+    QListWidget *filesList = new QListWidget(&dialog);
+    filesList->setSelectionMode(QAbstractItemView::SingleSelection);
+    for (const QFileInfo &info : materials) {
+        QListWidgetItem *item = new QListWidgetItem(info.fileName(), filesList);
+        item->setData(Qt::UserRole, info.absoluteFilePath());
+    }
+    filesList->setCurrentRow(0);
+    layout->addWidget(filesList, 1);
+
+    QLabel *pathLabel = new QLabel(
+        QStringLiteral("Папка: %1").arg(QDir::toNativeSeparators(materialsDir.absolutePath())),
+        &dialog);
+    pathLabel->setProperty("role", QStringLiteral("muted"));
+    pathLabel->setWordWrap(true);
+    layout->addWidget(pathLabel);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(&dialog);
+    QPushButton *openButton = buttons->addButton(QStringLiteral("Открыть"), QDialogButtonBox::AcceptRole);
+    buttons->addButton(QStringLiteral("Закрыть"), QDialogButtonBox::RejectRole);
+    layout->addWidget(buttons);
+
+    const auto openSelected = [&dialog, filesList]() {
+        QListWidgetItem *current = filesList->currentItem();
+        if (!current) {
+            QMessageBox::information(
+                &dialog,
+                QStringLiteral("Справочный материал"),
+                QStringLiteral("Выберите файл из списка."));
+            return;
+        }
+
+        const QString filePath = current->data(Qt::UserRole).toString();
+        openMaterialByPath(filePath, &dialog);
+    };
+
+    QObject::connect(openButton, &QPushButton::clicked, &dialog, openSelected);
+    QObject::connect(filesList, &QListWidget::itemDoubleClicked, &dialog, [openSelected](QListWidgetItem *) {
+        openSelected();
+    });
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    dialog.exec();
 }
 
 int minimumRequiredLevelFromText(const QString &text)
@@ -381,10 +506,10 @@ int rollAbilityScore4d6DropLowest()
 int choiceCountFromText(const QString &text)
 {
     const QString lowered = text.toLower();
-    if (lowered.contains("три")) {
+    if (lowered.contains("С‚СЂРё")) {
         return 3;
     }
-    if (lowered.contains("дв") || lowered.contains("2")) {
+    if (lowered.contains("РґРІ") || lowered.contains("2")) {
         return 2;
     }
     return 1;
@@ -455,7 +580,7 @@ bool languageEntryImpliesChoice(const QString &text)
            lowered.contains(QStringLiteral("выбор")) ||
            lowered.contains(QStringLiteral("по вашему выбору")) ||
            lowered.contains(QStringLiteral("на ваш выбор")) ||
-           lowered.contains(QStringLiteral(" или ")) ||
+           lowered.contains(QStringLiteral(" РёР»Рё ")) ||
            lowered.contains(QStringLiteral("любой"));
 }
 
@@ -466,8 +591,8 @@ QStringList explicitLanguageOptions(const QString &text)
         return {};
     }
 
-    if (lowered.contains(QStringLiteral("или")) ||
-        lowered.contains(QStringLiteral("из ")) ||
+    if (lowered.contains(QStringLiteral("РёР»Рё")) ||
+        lowered.contains(QStringLiteral("РёР· ")) ||
         lowered.contains(QStringLiteral("следующ"))) {
         return extractLanguageNames(text);
     }
@@ -494,7 +619,7 @@ ParsedLanguageEntry parseLanguageEntry(const QString &text)
     }
 
     const QString lowered = normalizedName(trimmed);
-    const int orIndex = lowered.lastIndexOf(QStringLiteral(" или "));
+    const int orIndex = lowered.lastIndexOf(QStringLiteral(" РёР»Рё "));
     if (orIndex >= 0) {
         QStringList leftLanguages = extractLanguageNames(trimmed.left(orIndex));
         const QStringList rightLanguages = extractLanguageNames(trimmed.mid(orIndex));
@@ -737,12 +862,12 @@ QStringList armorChoicePoolForText(const QString &text)
         if (lowered.contains(QStringLiteral("средн"))) {
             appendIfMissing(QStringLiteral("Средние доспехи"));
         }
-        if (lowered.contains(QStringLiteral("тяж"))) {
+        if (lowered.contains(QStringLiteral("С‚СЏР¶"))) {
             appendIfMissing(QStringLiteral("Тяжёлые доспехи"));
         }
     }
 
-    if (lowered.contains(QStringLiteral("щит"))) {
+    if (lowered.contains(QStringLiteral("С‰РёС‚"))) {
         appendIfMissing(QStringLiteral("Щиты"));
     }
 
@@ -989,7 +1114,7 @@ QList<RaceProficiencyChoiceGrant> raceProficiencyChoiceGrants(const Race &race, 
         const bool mentionsWeapons = lowered.contains(QStringLiteral("оруж"));
         const bool mentionsArmor = lowered.contains(QStringLiteral("доспех")) || lowered.contains(QStringLiteral("щит"));
 
-        if (mentionsSkills && mentionsTools && lowered.contains(QStringLiteral(" или "))) {
+        if (mentionsSkills && mentionsTools && lowered.contains(QStringLiteral(" РёР»Рё "))) {
             QStringList options;
             for (const QString &skill : knownSkillNames()) {
                 if (bracketedOptions.isEmpty()) {
@@ -1326,8 +1451,8 @@ QStringList splitDelimitedValues(const QString &text)
     QStringList values = cleaned.split(',', Qt::SkipEmptyParts);
     for (QString &value : values) {
         value = value.simplified();
-        value.remove(QRegularExpression(QStringLiteral("^(?:и|или)\\s+"), QRegularExpression::CaseInsensitiveOption));
-        value.remove(QRegularExpression(QStringLiteral("\\s+(?:и|или)$"), QRegularExpression::CaseInsensitiveOption));
+        value.remove(QRegularExpression(QStringLiteral("^(?:Рё|РёР»Рё)\\s+"), QRegularExpression::CaseInsensitiveOption));
+        value.remove(QRegularExpression(QStringLiteral("\\s+(?:Рё|РёР»Рё)$"), QRegularExpression::CaseInsensitiveOption));
     }
 
     return uniqueStrings(values);
@@ -1415,7 +1540,7 @@ QStringList inlineAsiOptions(const QString &text)
 {
     QStringList options;
     const QRegularExpression optionRegex(
-        QStringLiteral("\\(([а-яa-z])\\)\\s*(.*?)(?=(?:\\([а-яa-z]\\)\\s*)|$)"),
+        QStringLiteral("\\(([Р°-СЏa-z])\\)\\s*(.*?)(?=(?:\\([Р°-СЏa-z]\\)\\s*)|$)"),
         QRegularExpression::CaseInsensitiveOption);
     QRegularExpressionMatchIterator iterator = optionRegex.globalMatch(text);
     while (iterator.hasNext()) {
@@ -1465,7 +1590,7 @@ QMap<QString, int> fixedRaceBonusesFromText(const QString &text)
     QMap<QString, int> bonuses;
     for (const AbilityPattern &pattern : patterns) {
         const QRegularExpression regex(
-            QStringLiteral("%1[^.\\n]{0,60}?на\\s*(\\d+)").arg(pattern.pattern),
+            QStringLiteral("%1[^.\\n]{0,60}?РЅР°\\s*(\\d+)").arg(pattern.pattern),
             QRegularExpression::CaseInsensitiveOption);
         const QRegularExpressionMatch match = regex.match(text);
         if (match.hasMatch()) {
@@ -1702,7 +1827,7 @@ QStringList classSectionArmorProficiencies(const ClassSection &section)
     if (lowered.contains(QStringLiteral("легк")) || lowered.contains(QStringLiteral("лёгк"))) {
         values << QStringLiteral("Лёгкие доспехи");
     }
-    if (lowered.contains(QStringLiteral("щит"))) {
+    if (lowered.contains(QStringLiteral("С‰РёС‚"))) {
         values << QStringLiteral("Щиты");
     }
     return uniqueStrings(values);
@@ -1831,7 +1956,7 @@ QStringList racialArmorProficiencies(const QMap<QString, QString> &traits, int l
             continue;
         }
         proficiencies << extractCategoryProficienciesFromTrait(it.value(), QStringLiteral("доспех"));
-        proficiencies << extractCategoryProficienciesFromTrait(it.value(), QStringLiteral("щит"));
+        proficiencies << extractCategoryProficienciesFromTrait(it.value(), QStringLiteral("С‰РёС‚"));
     }
     return uniqueStrings(proficiencies);
 }
@@ -1849,11 +1974,11 @@ QStringList racialWeaponProficiencies(const QMap<QString, QString> &traits, int 
         if (normalizedTitle.contains(QStringLiteral("владение")) ||
             normalizedDescription.contains(QStringLiteral("оруж")) ||
             normalizedDescription.contains(QStringLiteral("арбал")) ||
-            normalizedDescription.contains(QStringLiteral("лук")) ||
+            normalizedDescription.contains(QStringLiteral("Р»СѓРє")) ||
             normalizedDescription.contains(QStringLiteral("копь")) ||
             normalizedDescription.contains(QStringLiteral("трезуб")) ||
             normalizedDescription.contains(QStringLiteral("сеть")) ||
-            normalizedDescription.contains(QStringLiteral("меч")) ||
+            normalizedDescription.contains(QStringLiteral("РјРµС‡")) ||
             normalizedDescription.contains(QStringLiteral("рапир"))) {
             const QStringList extracted = extractCategoryProficienciesFromTrait(it.value(), QStringLiteral("оруж"));
             if (!extracted.isEmpty()) {
@@ -1899,7 +2024,7 @@ QStringList quotedPrerequisiteNames(const QString &prerequisite, const QString &
 {
     QStringList names;
     const QRegularExpression regex(
-        QString("%1\\s*[«\"]\\s*([^»\"]+?)\\s*[»\"]").arg(keywordPattern),
+        QString("%1\\s*[В«\"]\\s*([^В»\"]+?)\\s*[В»\"]").arg(keywordPattern),
         QRegularExpression::CaseInsensitiveOption);
     QRegularExpressionMatchIterator iterator = regex.globalMatch(prerequisite);
     while (iterator.hasNext()) {
@@ -2000,7 +2125,7 @@ bool featSatisfiesPrerequisite(
     }
 
     if (prerequisite.contains(QStringLiteral("Владение лёгкими доспехами"), Qt::CaseInsensitive) &&
-        !listContainsFragment(character->armorProficiencies, QStringLiteral("лёг")) &&
+        !listContainsFragment(character->armorProficiencies, QStringLiteral("Р»С‘Рі")) &&
         !listContainsFragment(character->armorProficiencies, QStringLiteral("легк"))) {
         return false;
     }
@@ -2011,7 +2136,7 @@ bool featSatisfiesPrerequisite(
     }
 
     if (prerequisite.contains(QStringLiteral("Владение тяжёлыми доспехами"), Qt::CaseInsensitive) &&
-        !listContainsFragment(character->armorProficiencies, QStringLiteral("тяж"))) {
+        !listContainsFragment(character->armorProficiencies, QStringLiteral("С‚СЏР¶"))) {
         return false;
     }
 
@@ -2161,106 +2286,119 @@ void PlayerPage::setCampaign(const QString &campaignName)
 
 void PlayerPage::setupUi()
 {
+    setObjectName(QStringLiteral("PlayerPage"));
+
     QVBoxLayout *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(8);
 
     tabWidget = new QTabWidget(this);
+    tabWidget->setDocumentMode(true);
 
-    // Hamburger Menu Button (Corner Widget)
     QToolButton *menuBtn = new QToolButton(this);
-    menuBtn->setText("☰");
+    menuBtn->setObjectName(QStringLiteral("SidebarMenuBtn"));
+    menuBtn->setText(QStringLiteral("\u2630"));
     menuBtn->setAutoRaise(true);
     menuBtn->setPopupMode(QToolButton::InstantPopup);
     menuBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
     QFont btnFont = menuBtn->font();
-    btnFont.setPointSize(12);
+    btnFont.setPointSize(13);
+    btnFont.setBold(true);
     menuBtn->setFont(btnFont);
 
-    QMenu *menu = new QMenu(this);
-    QAction *saveCharacterAction = menu->addAction("Сохранить персонажа");
-    QAction *reloadCharacterAction = menu->addAction("Перезагрузить персонажа");
+    QMenu *menu = new QMenu(menuBtn);
+    QAction *referenceMaterialsAction = menu->addAction(QStringLiteral("Справочный материал"));
     menu->addSeparator();
-    QAction *mainMenuAction = menu->addAction("Main Menu");
+    QAction *mainMenuAction = menu->addAction(QStringLiteral("Главное меню"));
 
     menuBtn->setMenu(menu);
-    connect(saveCharacterAction, &QAction::triggered, this, &PlayerPage::saveCurrentCharacter);
-    connect(reloadCharacterAction, &QAction::triggered, this, &PlayerPage::loadCharacterForCurrentCampaign);
+    connect(referenceMaterialsAction, &QAction::triggered, this, [this]() {
+        showReferenceMaterialsDialog(this);
+    });
     connect(mainMenuAction, &QAction::triggered, this, &PlayerPage::mainMenuRequested);
 
     tabWidget->setCornerWidget(menuBtn, Qt::TopRightCorner);
 
-    // 1. Notes Tab (Заметки)
     notesWidget = new NotesWidget(this);
 
-    // 2. Character Tab (Персонаж)
     QWidget *charTab = new QWidget();
     QVBoxLayout *charLayout = new QVBoxLayout(charTab);
-    
+    charLayout->setContentsMargins(8, 8, 8, 8);
+    charLayout->setSpacing(8);
+
     charStack = new QStackedWidget(charTab);
-    
-    // --- Page 0: Character Info (Existing) ---
+
     QWidget *charInfoPage = new QWidget();
     QVBoxLayout *infoLayout = new QVBoxLayout(charInfoPage);
-    
-    // Top controls for character tab
+    infoLayout->setContentsMargins(0, 0, 0, 0);
+    infoLayout->setSpacing(8);
+
     QHBoxLayout *charControlsLayout = new QHBoxLayout();
-    QPushButton *createCharBtn = new QPushButton("Создать нового персонажа");
-    QPushButton *levelUpBtn = new QPushButton("Повысить уровень");
+    QLabel *charHeaderLabel = new QLabel(QStringLiteral("Управление персонажем"));
+    QFont headerFont = charHeaderLabel->font();
+    headerFont.setPointSize(13);
+    headerFont.setBold(true);
+    charHeaderLabel->setFont(headerFont);
+
+    QPushButton *createCharBtn = new QPushButton(QStringLiteral("Создать нового персонажа"));
+    createCharBtn->setProperty("variant", QStringLiteral("accent"));
+    QPushButton *levelUpBtn = new QPushButton(QStringLiteral("Повысить уровень"));
     connect(createCharBtn, &QPushButton::clicked, this, &PlayerPage::startCharacterCreation);
     connect(levelUpBtn, &QPushButton::clicked, this, &PlayerPage::levelUpCharacter);
-    
-    charControlsLayout->addWidget(new QLabel("Информация о персонаже"));
+
+    charControlsLayout->addWidget(charHeaderLabel);
     charControlsLayout->addStretch();
     charControlsLayout->addWidget(levelUpBtn);
     charControlsLayout->addWidget(createCharBtn);
-    
-    infoLayout->addLayout(charControlsLayout);
-    
-    // Character Sheet Widget
-    characterSheet = new CharacterSheet(charInfoPage);
-    infoLayout->addWidget(characterSheet);
 
-    QPushButton *exportPdfBtn = new QPushButton("Скачать в PDF");
-    infoLayout->addWidget(exportPdfBtn);
-    infoLayout->addStretch();
-    
+    infoLayout->addLayout(charControlsLayout);
+
+    characterSheet = new CharacterSheet(charInfoPage);
+    infoLayout->addWidget(characterSheet, 1);
+
+    QPushButton *exportPdfBtn = new QPushButton(QStringLiteral("Экспорт в PDF"));
+    infoLayout->addWidget(exportPdfBtn, 0, Qt::AlignRight);
+
     charStack->addWidget(charInfoPage);
-    
-    // --- Page 1: Character Creation (Race Selection) ---
+
     QWidget *creationPage = new QWidget();
     QVBoxLayout *creationLayout = new QVBoxLayout(creationPage);
-    
+    creationLayout->setContentsMargins(0, 0, 0, 0);
+    creationLayout->setSpacing(8);
+
     QHBoxLayout *creationHeader = new QHBoxLayout();
-    QPushButton *backBtn = new QPushButton("Назад");
+    QPushButton *backBtn = new QPushButton(QStringLiteral("Назад"));
     connect(backBtn, &QPushButton::clicked, this, [this]() {
         cancelPendingLevelUp(true);
         showCharacterInfo();
     });
-    
-    QLabel *stepLabel = new QLabel("Шаг 1: Выбор расы");
-    stepLabel->setStyleSheet("font-size: 16px; font-weight: bold;");
-    
+
+    QLabel *stepLabel = new QLabel(QStringLiteral("Шаг 1: выбор расы"));
+    QFont stepFont = stepLabel->font();
+    stepFont.setPointSize(12);
+    stepFont.setBold(true);
+    stepLabel->setFont(stepFont);
+
     creationHeader->addWidget(backBtn);
     creationHeader->addStretch();
     creationHeader->addWidget(stepLabel);
     creationHeader->addStretch();
-    
+
     creationLayout->addLayout(creationHeader);
-    
-    // Race Selection Widget
+
     racePage = new RaceSelectionPage(creationPage);
     connect(racePage, &RaceSelectionPage::raceChosen, this, &PlayerPage::onRaceChosen);
-    creationLayout->addWidget(racePage);
-    
+    creationLayout->addWidget(racePage, 1);
+
     charStack->addWidget(creationPage);
-    
-    // --- Page 2: Character Creation (Class Selection) ---
+
     QWidget *classPageContainer = new QWidget();
     QVBoxLayout *classLayout = new QVBoxLayout(classPageContainer);
-    
+    classLayout->setContentsMargins(0, 0, 0, 0);
+    classLayout->setSpacing(8);
+
     QHBoxLayout *classHeader = new QHBoxLayout();
-    QPushButton *classBackBtn = new QPushButton("Назад");
-    
-    // Back from Class selection goes to Race selection (Index 1)
+    QPushButton *classBackBtn = new QPushButton(QStringLiteral("Назад"));
     connect(classBackBtn, &QPushButton::clicked, this, [this]() {
         if (levelUpInProgress) {
             cancelPendingLevelUp(true);
@@ -2269,60 +2407,60 @@ void PlayerPage::setupUi()
         }
         charStack->setCurrentIndex(1);
     });
-    
-    QLabel *classStepLabel = new QLabel("Шаг 2: Выбор класса");
-    classStepLabel->setStyleSheet("font-size: 16px; font-weight: bold;");
-    
+
+    QLabel *classStepLabel = new QLabel(QStringLiteral("Шаг 2: выбор класса"));
+    classStepLabel->setFont(stepFont);
+
     classHeader->addWidget(classBackBtn);
     classHeader->addStretch();
     classHeader->addWidget(classStepLabel);
     classHeader->addStretch();
-    
+
     classLayout->addLayout(classHeader);
-    
+
     classPage = new ClassSelectionPage(classPageContainer);
     connect(classPage, &ClassSelectionPage::classChosen, this, &PlayerPage::onClassChosen);
-    
-    classLayout->addWidget(classPage);
+    classLayout->addWidget(classPage, 1);
     charStack->addWidget(classPageContainer);
 
-    charLayout->addWidget(charStack);
+    charLayout->addWidget(charStack, 1);
 
-    // 3. Spells Tab (Список Заклинаний)
     QWidget *spellsTab = new QWidget();
     QVBoxLayout *spellsLayout = new QVBoxLayout(spellsTab);
+    spellsLayout->setContentsMargins(0, 0, 0, 0);
     spellsLayout->addWidget(new SpellBookWidget(this));
 
-    // 4. Items Tab (Список Предметов)
     QWidget *itemsTab = new QWidget();
     QVBoxLayout *itemsLayout = new QVBoxLayout(itemsTab);
+    itemsLayout->setContentsMargins(0, 0, 0, 0);
     itemsLayout->addWidget(new ItemBookWidget(ItemBookWidget::GeneralItems, this));
 
-    // 5. Weapons and Armor Tab (Список Оружия и доспехов)
     QWidget *equipmentTab = new QWidget();
     QVBoxLayout *equipmentLayout = new QVBoxLayout(equipmentTab);
+    equipmentLayout->setContentsMargins(0, 0, 0, 0);
     equipmentLayout->addWidget(new ItemBookWidget(ItemBookWidget::WeaponsAndArmor, this));
 
-    // Add tabs in order
-    tabWidget->addTab(notesWidget, "Заметки");
-    tabWidget->addTab(charTab, "Персонаж");
-    tabWidget->addTab(spellsTab, "Список Заклинаний");
-    tabWidget->addTab(itemsTab, "Список Предметов");
-    tabWidget->addTab(equipmentTab, "Список Оружия и доспехов");
+    tabWidget->addTab(notesWidget, QStringLiteral("Заметки"));
+    tabWidget->addTab(charTab, QStringLiteral("Персонаж"));
+    tabWidget->addTab(spellsTab, QStringLiteral("Список заклинаний"));
+    tabWidget->addTab(itemsTab, QStringLiteral("Список предметов"));
+    tabWidget->addTab(equipmentTab, QStringLiteral("Список оружия и доспехов"));
 
-    layout->addWidget(tabWidget);
+    layout->addWidget(tabWidget, 1);
 }
-
 void PlayerPage::startCharacterCreation()
 {
     if (currentCharacter && !currentCharacter->name().trimmed().isEmpty()) {
-        const auto answer = QMessageBox::question(
-            this,
-            "Перезаписать персонажа",
-            QString("В кампании \"%1\" уже есть персонаж. Создать нового и заменить текущего?")
-                .arg(currentCampaign.isEmpty() ? "без названия" : currentCampaign));
+        QMessageBox overwriteBox(this);
+        overwriteBox.setIcon(QMessageBox::Question);
+        overwriteBox.setWindowTitle(QStringLiteral("\u041f\u0435\u0440\u0435\u0437\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0430"));
+        overwriteBox.setText(QStringLiteral("\u0412 \u043a\u0430\u043c\u043f\u0430\u043d\u0438\u0438 \"%1\" \u0443\u0436\u0435 \u0435\u0441\u0442\u044c \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u0436. \u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u043e\u0433\u043e \u0438 \u0437\u0430\u043c\u0435\u043d\u0438\u0442\u044c \u0442\u0435\u043a\u0443\u0449\u0435\u0433\u043e?")
+                                 .arg(currentCampaign.isEmpty() ? QStringLiteral("\u0431\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f") : currentCampaign));
+        QPushButton *yesBtn = overwriteBox.addButton(QStringLiteral("\u0414\u0430"), QMessageBox::AcceptRole);
+        overwriteBox.addButton(QStringLiteral("\u041d\u0435\u0442"), QMessageBox::RejectRole);
+        overwriteBox.exec();
 
-        if (answer != QMessageBox::Yes) {
+        if (overwriteBox.clickedButton() != yesBtn) {
             return;
         }
     }
@@ -2330,8 +2468,8 @@ void PlayerPage::startCharacterCreation()
     bool ok = false;
     int chosenLevel = QInputDialog::getInt(
         this,
-        "Уровень персонажа",
-        "Выберите итоговый уровень персонажа (1-20):",
+        QStringLiteral("\u0423\u0440\u043e\u0432\u0435\u043d\u044c \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0430"),
+        QStringLiteral("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0438\u0442\u043e\u0433\u043e\u0432\u044b\u0439 \u0443\u0440\u043e\u0432\u0435\u043d\u044c \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0430 (1-20):"),
         1,
         1,
         20,
@@ -2344,8 +2482,8 @@ void PlayerPage::startCharacterCreation()
 
     QString chosenName = QInputDialog::getText(
         this,
-        "Имя персонажа",
-        "Введите имя персонажа:",
+        QStringLiteral("\u0418\u043c\u044f \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0430"),
+        QStringLiteral("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0438\u043c\u044f \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0430:"),
         QLineEdit::Normal,
         currentCharacter ? currentCharacter->name() : QString(),
         &ok).trimmed();
@@ -2355,7 +2493,7 @@ void PlayerPage::startCharacterCreation()
     }
 
     if (chosenName.isEmpty()) {
-        QMessageBox::warning(this, "Имя персонажа", "Имя персонажа не должно быть пустым.");
+        QMessageBox::warning(this, QStringLiteral("\u0418\u043c\u044f \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0430"), QStringLiteral("\u0418\u043c\u044f \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u0436\u0430 \u043d\u0435 \u0434\u043e\u043b\u0436\u043d\u043e \u0431\u044b\u0442\u044c \u043f\u0443\u0441\u0442\u044b\u043c."));
         return;
     }
 
@@ -2797,10 +2935,10 @@ int skillCountFromMulticlassEntry(const QString &entry)
     if (!lowered.contains(QStringLiteral("навык"))) {
         return 0;
     }
-    if (lowered.contains(QStringLiteral("два")) || lowered.contains(QStringLiteral("2"))) {
+    if (lowered.contains(QStringLiteral("РґРІР°")) || lowered.contains(QStringLiteral("2"))) {
         return 2;
     }
-    if (lowered.contains(QStringLiteral("три")) || lowered.contains(QStringLiteral("3"))) {
+    if (lowered.contains(QStringLiteral("С‚СЂРё")) || lowered.contains(QStringLiteral("3"))) {
         return 3;
     }
     return 1;
@@ -2866,7 +3004,7 @@ QStringList fightingStyleOptionsFromDescription(const QString &description)
         if (trimmed.isEmpty() || trimmed.length() > 48) {
             return false;
         }
-        if (trimmed.startsWith(QStringLiteral("Вы "), Qt::CaseInsensitive)) {
+        if (trimmed.startsWith(QStringLiteral("Р’С‹ "), Qt::CaseInsensitive)) {
             return false;
         }
         const QString lowered = normalizedToken(trimmed);
@@ -2876,7 +3014,7 @@ QStringList fightingStyleOptionsFromDescription(const QString &description)
         if (trimmed.startsWith(QStringLiteral("Пока "), Qt::CaseInsensitive) ||
             trimmed.startsWith(QStringLiteral("Если "), Qt::CaseInsensitive) ||
             trimmed.startsWith(QStringLiteral("Когда "), Qt::CaseInsensitive) ||
-            trimmed.startsWith(QStringLiteral("В "), Qt::CaseInsensitive) ||
+            trimmed.startsWith(QStringLiteral("Р’ "), Qt::CaseInsensitive) ||
             trimmed.startsWith(QStringLiteral("Начиная "), Qt::CaseInsensitive)) {
             return false;
         }
@@ -3193,16 +3331,30 @@ void PlayerPage::levelUpCharacter()
     prepareSelectedClassesFromCharacter();
 
     const QString lastClassName = lastTakenClassName();
+    QStringList existingClassNames;
+    for (const QString &className : classSelectionOrder) {
+        if (selectedClassLevels.value(className, 0) > 0 && !existingClassNames.contains(className)) {
+            existingClassNames << className;
+        }
+    }
+    for (auto it = selectedClassLevels.constBegin(); it != selectedClassLevels.constEnd(); ++it) {
+        if (it.value() > 0 && !existingClassNames.contains(it.key())) {
+            existingClassNames << it.key();
+        }
+    }
+    const bool hasMulticlass = existingClassNames.size() > 1;
     QMessageBox choiceBox(this);
     choiceBox.setIcon(QMessageBox::Question);
     choiceBox.setWindowTitle(QStringLiteral("Повышение уровня"));
     choiceBox.setText(QStringLiteral("Персонаж будет повышен до уровня %1.").arg(targetCharacterLevel));
     choiceBox.setInformativeText(QStringLiteral("Куда добавить новый уровень?"));
 
-    QPushButton *lastClassBtn = nullptr;
+    QPushButton *existingClassBtn = nullptr;
     if (!lastClassName.isEmpty()) {
-        lastClassBtn = choiceBox.addButton(
-            QStringLiteral("Повысить «%1»").arg(lastClassName),
+        existingClassBtn = choiceBox.addButton(
+            hasMulticlass
+                ? QStringLiteral("Повысить существующий класс")
+                : QStringLiteral("Повысить «%1»").arg(lastClassName),
             QMessageBox::AcceptRole);
     }
     QPushButton *multiclassBtn = choiceBox.addButton(
@@ -3216,16 +3368,56 @@ void PlayerPage::levelUpCharacter()
         return;
     }
 
-    if (lastClassBtn && choiceBox.clickedButton() == lastClassBtn) {
-        Class selectedClass = selectedClasses.value(lastClassName);
+    if (existingClassBtn && choiceBox.clickedButton() == existingClassBtn) {
+        QString targetClassName = lastClassName;
+        if (hasMulticlass) {
+            QList<ChoiceEntry> classEntries;
+            for (const QString &className : existingClassNames) {
+                const int classLevel = selectedClassLevels.value(className, 0);
+                const QString subclassName = selectedSubclassNames.value(className).trimmed();
+                const QString details = subclassName.isEmpty()
+                    ? QStringLiteral("Текущий уровень класса: %1").arg(classLevel)
+                    : QStringLiteral("Текущий уровень класса: %1\nПодкласс: %2").arg(classLevel).arg(subclassName);
+
+                classEntries.append({
+                    className,
+                    QStringLiteral("%1 (%2)").arg(className).arg(classLevel),
+                    details,
+                    false,
+                    QString()
+                });
+            }
+
+            SearchableChoiceDialog classDialog(
+                QStringLiteral("Выбор класса"),
+                QStringLiteral("Выберите класс, уровень которого нужно повысить на 1."),
+                classEntries,
+                false,
+                this,
+                -1,
+                QString());
+
+            if (classDialog.exec() != QDialog::Accepted) {
+                cancelPendingLevelUp(true);
+                return;
+            }
+
+            targetClassName = classDialog.selectedKey().trimmed();
+            if (targetClassName.isEmpty()) {
+                cancelPendingLevelUp(true);
+                return;
+            }
+        }
+
+        Class selectedClass = selectedClasses.value(targetClassName);
         if (selectedClass.name.isEmpty()) {
-            selectedClass = classPage->getClassData(lastClassName);
+            selectedClass = classPage->getClassData(targetClassName);
         }
         if (selectedClass.name.isEmpty()) {
             QMessageBox::warning(
                 this,
                 QStringLiteral("Повышение уровня"),
-                QStringLiteral("Не удалось загрузить данные класса «%1».").arg(lastClassName));
+                QStringLiteral("Не удалось загрузить данные класса «%1».").arg(targetClassName));
             cancelPendingLevelUp(true);
             return;
         }
@@ -3415,9 +3607,9 @@ bool PlayerPage::applyRaceAbilityBonuses(const Race &race)
             bonuses = fixedRaceBonusesFromText(selectedAbilityText);
 
             if (lowered.contains(QStringLiteral("одной характеристики по вашему выбору")) &&
-                lowered.contains(QStringLiteral("на 2")) &&
+                lowered.contains(QStringLiteral("РЅР° 2")) &&
                 lowered.contains(QStringLiteral("другой")) &&
-                lowered.contains(QStringLiteral("на 1"))) {
+                lowered.contains(QStringLiteral("РЅР° 1"))) {
                 if (!chooseAbilityIncreaseTargets(this, race.name, QStringLiteral("Выберите характеристику для бонуса +2."), 1, 2, {}, &bonuses)) {
                     return false;
                 }
@@ -3735,7 +3927,7 @@ void PlayerPage::applyFeat(const Feat &feat)
     int increaseAmount = 0;
     QStringList candidateAbilities;
     const QString abilityText = feat.benefits.join(" ");
-    const QRegularExpression amountRegex(QStringLiteral("на\\s*(\\d+)"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpression amountRegex(QStringLiteral("РЅР°\\s*(\\d+)"), QRegularExpression::CaseInsensitiveOption);
     const QRegularExpressionMatch match = amountRegex.match(abilityText);
     if (match.hasMatch()) {
         increaseAmount = match.captured(1).toInt();
@@ -4669,7 +4861,7 @@ void PlayerPage::onClassChosen(const Class &cls)
             QMessageBox::warning(
                 this,
                 QStringLiteral("Мультикласс"),
-                QStringLiteral("Класс «%1» уже есть у персонажа. Чтобы повысить его уровень, выберите «Повысить последний класс».")
+                QStringLiteral("Класс «%1» уже есть у персонажа. Чтобы повысить его уровень, выберите «Повысить существующий класс».")
                     .arg(cls.name));
             return;
         }
@@ -4746,6 +4938,7 @@ void PlayerPage::onClassChosen(const Class &cls)
 
     completeCharacterCreation();
 }
+
 
 
 
