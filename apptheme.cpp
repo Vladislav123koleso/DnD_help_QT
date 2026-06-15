@@ -120,6 +120,10 @@ QTreeWidget {
     padding: 6px 8px;
 }
 
+QComboBox {
+    padding-right: 34px;
+}
+
 QTextEdit:read-only,
 QPlainTextEdit:read-only {
     background-color: #f3e8dc;
@@ -136,10 +140,27 @@ QTreeWidget:focus {
 }
 
 QComboBox::drop-down {
-    subcontrol-origin: padding;
+    subcontrol-origin: border;
     subcontrol-position: top right;
-    width: 22px;
+    width: 28px;
     border-left: 1px solid #c6ac8f;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    background-color: #eadfd1;
+}
+
+QComboBox::drop-down:hover {
+    background-color: #e0d2c3;
+}
+
+QComboBox::down-arrow {
+    image: url(:/DndHelperDesign/DndHelperDesignContent/images/ui/combo_down_arrow.png);
+    width: 16px;
+    height: 16px;
+}
+
+QComboBox::down-arrow:on {
+    top: 1px;
 }
 
 QPushButton,

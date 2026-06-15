@@ -87,6 +87,7 @@ private:
     void addInventoryItem(const Item &item);
     void addInventoryTextEntry(const QString &entry);
     void completeCharacterCreation();
+    void exportCurrentCharacterToPdf();
     void synchronizeCharacterFromClasses(bool refillCurrentHp);
     void saveCurrentCharacter();
     void loadCharacterForCurrentCampaign();

@@ -13,6 +13,11 @@
 #include <QListWidget>
 #include <QRandomGenerator>
 #include <QDebug>
+#include <QFileDialog>
+#include <QFontMetrics>
+#include <QPageSize>
+#include <QPainter>
+#include <QPdfWriter>
 #include <QRegularExpression>
 #include <QLineEdit>
 #include <QSplitter>
@@ -2263,6 +2268,862 @@ QString spellDetailsText(const Spell &spell)
     return lines.join("\n");
 }
 
+struct PdfNamedAbilityEntry {
+    QString name;
+    QString ability;
+};
+
+QString pdfDashIfEmpty(QString value)
+{
+    value = value.simplified();
+    return value.isEmpty() ? QStringLiteral("-") : value;
+}
+
+QString pdfDashIfBlank(QString value)
+{
+    value = value.trimmed();
+    return value.isEmpty() ? QStringLiteral("-") : value;
+}
+
+QString pdfSignedValue(int value)
+{
+    return QStringLiteral("%1%2")
+        .arg(value >= 0 ? QStringLiteral("+") : QString())
+        .arg(value);
+}
+
+QStringList pdfNormalizedList(const QStringList &values)
+{
+    QStringList normalized;
+    for (const QString &value : values) {
+        normalized << normalizedName(value);
+    }
+    return normalized;
+}
+
+const QList<PdfNamedAbilityEntry> &pdfSavingThrowDefinitions()
+{
+    static const QList<PdfNamedAbilityEntry> definitions = {
+        {QStringLiteral("Сила"), QStringLiteral("Сила")},
+        {QStringLiteral("Ловкость"), QStringLiteral("Ловкость")},
+        {QStringLiteral("Телосложение"), QStringLiteral("Телосложение")},
+        {QStringLiteral("Интеллект"), QStringLiteral("Интеллект")},
+        {QStringLiteral("Мудрость"), QStringLiteral("Мудрость")},
+        {QStringLiteral("Харизма"), QStringLiteral("Харизма")}
+    };
+    return definitions;
+}
+
+const QList<PdfNamedAbilityEntry> &pdfSkillDefinitions()
+{
+    static const QList<PdfNamedAbilityEntry> definitions = {
+        {QStringLiteral("Акробатика"), QStringLiteral("Ловкость")},
+        {QStringLiteral("Атлетика"), QStringLiteral("Сила")},
+        {QStringLiteral("Восприятие"), QStringLiteral("Мудрость")},
+        {QStringLiteral("Выживание"), QStringLiteral("Мудрость")},
+        {QStringLiteral("Выступление"), QStringLiteral("Харизма")},
+        {QStringLiteral("Запугивание"), QStringLiteral("Харизма")},
+        {QStringLiteral("История"), QStringLiteral("Интеллект")},
+        {QStringLiteral("Ловкость рук"), QStringLiteral("Ловкость")},
+        {QStringLiteral("Магия"), QStringLiteral("Интеллект")},
+        {QStringLiteral("Медицина"), QStringLiteral("Мудрость")},
+        {QStringLiteral("Обман"), QStringLiteral("Харизма")},
+        {QStringLiteral("Природа"), QStringLiteral("Интеллект")},
+        {QStringLiteral("Проницательность"), QStringLiteral("Мудрость")},
+        {QStringLiteral("Расследование"), QStringLiteral("Интеллект")},
+        {QStringLiteral("Религия"), QStringLiteral("Интеллект")},
+        {QStringLiteral("Скрытность"), QStringLiteral("Ловкость")},
+        {QStringLiteral("Убеждение"), QStringLiteral("Харизма")},
+        {QStringLiteral("Уход за животными"), QStringLiteral("Мудрость")}
+    };
+    return definitions;
+}
+
+QString pdfClassSummary(const Character *character)
+{
+    if (!character) {
+        return QStringLiteral("-");
+    }
+
+    const QString directSummary = character->characterClass().simplified();
+    if (!directSummary.isEmpty()) {
+        return directSummary;
+    }
+
+    QStringList order = character->classOrder;
+    if (order.isEmpty()) {
+        order = character->classLevels.keys();
+    }
+
+    QStringList parts;
+    for (const QString &className : order) {
+        const int classLevel = character->classLevels.value(className, 0);
+        if (classLevel <= 0) {
+            continue;
+        }
+        const QString subclass = character->subclassSelections.value(className).simplified();
+        parts << (subclass.isEmpty()
+            ? QStringLiteral("%1 %2").arg(className).arg(classLevel)
+            : QStringLiteral("%1 %2 (%3)").arg(className).arg(classLevel).arg(subclass));
+    }
+
+    return parts.isEmpty() ? QStringLiteral("%1 ур.").arg(character->level) : parts.join(QStringLiteral(" / "));
+}
+
+QString pdfSpeedSummary(const Character *character)
+{
+    if (!character) {
+        return QStringLiteral("-");
+    }
+
+    QStringList parts;
+    parts << QStringLiteral("%1 фт.").arg(character->speed);
+    if (character->flyingSpeed > 0) {
+        parts << QStringLiteral("полет %1 фт.").arg(character->flyingSpeed);
+    }
+    return parts.join(QStringLiteral(", "));
+}
+
+QStringList pdfFeatureLines(const Character *character)
+{
+    QStringList lines;
+    if (!character) {
+        return lines;
+    }
+
+    if (!character->backgroundFeatureName.simplified().isEmpty()) {
+        lines << QStringLiteral("Предыстория: %1").arg(character->backgroundFeatureName.simplified());
+        if (!character->backgroundFeatureDescription.simplified().isEmpty()) {
+            lines << character->backgroundFeatureDescription.simplified();
+        }
+    }
+
+    for (auto it = character->traits.begin(); it != character->traits.end(); ++it) {
+        const QString title = it.key().simplified();
+        const QString description = it.value().simplified();
+        if (title.isEmpty() && description.isEmpty()) {
+            continue;
+        }
+        lines << (description.isEmpty() ? title : QStringLiteral("%1: %2").arg(title, description));
+    }
+
+    for (const QString &featName : character->featNames) {
+        const QString description = character->featDescriptions.value(featName).simplified();
+        lines << (description.isEmpty()
+            ? QStringLiteral("Черта: %1").arg(featName)
+            : QStringLiteral("Черта: %1 - %2").arg(featName, description));
+    }
+
+    for (auto it = character->classFeatureChoices.begin(); it != character->classFeatureChoices.end(); ++it) {
+        lines << QStringLiteral("Выбор умения: %1 - %2").arg(it.key(), it.value());
+    }
+
+    if (!character->abilityScoreImprovementLog.isEmpty()) {
+        lines << QStringLiteral("Улучшения характеристик: %1").arg(character->abilityScoreImprovementLog.join(QStringLiteral("; ")));
+    }
+
+    return lines;
+}
+
+QStringList pdfAppearanceLines(const Character *character)
+{
+    QStringList lines;
+    if (!character) {
+        return lines;
+    }
+
+    lines << QStringLiteral("Возраст: %1").arg(pdfDashIfEmpty(character->age));
+    lines << QStringLiteral("Рост: %1").arg(pdfDashIfEmpty(character->height));
+    lines << QStringLiteral("Вес: %1").arg(pdfDashIfEmpty(character->weight));
+    lines << QStringLiteral("Кожа: %1").arg(pdfDashIfEmpty(character->skin));
+    lines << QStringLiteral("Волосы: %1").arg(pdfDashIfEmpty(character->hair));
+
+    if (!character->appearance.trimmed().isEmpty()) {
+        lines << QString();
+        lines << QStringLiteral("Описание внешности:");
+        lines << character->appearance.trimmed();
+    }
+
+    if (!character->personalHistory.trimmed().isEmpty()) {
+        lines << QString();
+        lines << QStringLiteral("Личная история:");
+        lines << character->personalHistory.trimmed();
+    }
+
+    return lines;
+}
+
+QStringList pdfProficiencyLines(const Character *character)
+{
+    QStringList lines;
+    if (!character) {
+        return lines;
+    }
+
+    lines << QStringLiteral("Языки: %1").arg(character->languages.isEmpty() ? QStringLiteral("-") : character->languages.join(QStringLiteral(", ")));
+    lines << QStringLiteral("Навыки: %1").arg(character->skillProficiencies.isEmpty() ? QStringLiteral("-") : character->skillProficiencies.join(QStringLiteral(", ")));
+    lines << QStringLiteral("Инструменты: %1").arg(character->toolProficiencies.isEmpty() ? QStringLiteral("-") : character->toolProficiencies.join(QStringLiteral(", ")));
+    lines << QStringLiteral("Спасброски: %1").arg(character->savingThrowProficiencies.isEmpty() ? QStringLiteral("-") : character->savingThrowProficiencies.join(QStringLiteral(", ")));
+    lines << QStringLiteral("Доспехи: %1").arg(character->armorProficiencies.isEmpty() ? QStringLiteral("-") : character->armorProficiencies.join(QStringLiteral(", ")));
+    lines << QStringLiteral("Оружие: %1").arg(character->weaponProficiencies.isEmpty() ? QStringLiteral("-") : character->weaponProficiencies.join(QStringLiteral(", ")));
+    return lines;
+}
+
+QStringList pdfInventoryLines(const Character *character)
+{
+    QStringList lines;
+    if (!character) {
+        return lines;
+    }
+
+    for (const Item &item : character->inventory) {
+        QString line = pdfDashIfEmpty(item.name);
+        QStringList meta;
+        if (item.quantity > 1) {
+            meta << QStringLiteral("x%1").arg(item.quantity);
+        }
+        if (item.isEquipped) {
+            meta << QStringLiteral("надето");
+        }
+        if (!item.type.simplified().isEmpty()) {
+            meta << item.type.simplified();
+        }
+        if (!item.weight.simplified().isEmpty()) {
+            meta << QStringLiteral("вес %1").arg(item.weight.simplified());
+        }
+        if (!meta.isEmpty()) {
+            line += QStringLiteral(" (%1)").arg(meta.join(QStringLiteral(", ")));
+        }
+        if (!item.description.simplified().isEmpty()) {
+            line += QStringLiteral(": %1").arg(item.description.simplified());
+        }
+        lines << line;
+    }
+
+    return lines;
+}
+
+QStringList pdfSpellSlotLines(const Character *character)
+{
+    QStringList lines;
+    if (!character) {
+        return lines;
+    }
+
+    for (auto it = character->spellSlotCurrent.begin(); it != character->spellSlotCurrent.end(); ++it) {
+        const QStringList parts = it.key().split(QStringLiteral("|"));
+        if (parts.size() == 2) {
+            lines << QStringLiteral("%1, %2 ур.: %3").arg(parts.at(0)).arg(parts.at(1)).arg(it.value());
+        } else {
+            lines << QStringLiteral("%1: %2").arg(it.key()).arg(it.value());
+        }
+    }
+
+    return lines;
+}
+
+QStringList pdfSpellcastingClassNames(const Character *character)
+{
+    QStringList classes;
+    if (!character) {
+        return classes;
+    }
+
+    QStringList order = character->classOrder;
+    if (order.isEmpty()) {
+        order = character->classLevels.keys();
+    }
+
+    for (const QString &className : order) {
+        if (character->classLevels.value(className, 0) <= 0) {
+            continue;
+        }
+
+        const QString normalizedClass = normalizedName(className);
+        if (normalizedClass == normalizedName(QStringLiteral("Бард")) ||
+            normalizedClass == normalizedName(QStringLiteral("Жрец")) ||
+            normalizedClass == normalizedName(QStringLiteral("Друид")) ||
+            normalizedClass == normalizedName(QStringLiteral("Волшебник")) ||
+            normalizedClass == normalizedName(QStringLiteral("Чародей")) ||
+            normalizedClass == normalizedName(QStringLiteral("Паладин")) ||
+            normalizedClass == normalizedName(QStringLiteral("Следопыт")) ||
+            normalizedClass == normalizedName(QStringLiteral("Изобретатель")) ||
+            normalizedClass == normalizedName(QStringLiteral("Колдун"))) {
+            classes << className;
+        }
+    }
+
+    return classes;
+}
+
+QString pdfSpellcastingAbilityName(const QString &className)
+{
+    const QString normalizedClass = normalizedName(className);
+    if (normalizedClass == normalizedName(QStringLiteral("Бард")) ||
+        normalizedClass == normalizedName(QStringLiteral("Паладин")) ||
+        normalizedClass == normalizedName(QStringLiteral("Колдун")) ||
+        normalizedClass == normalizedName(QStringLiteral("Чародей"))) {
+        return QStringLiteral("Харизма");
+    }
+    if (normalizedClass == normalizedName(QStringLiteral("Волшебник")) ||
+        normalizedClass == normalizedName(QStringLiteral("Изобретатель"))) {
+        return QStringLiteral("Интеллект");
+    }
+    if (normalizedClass == normalizedName(QStringLiteral("Жрец")) ||
+        normalizedClass == normalizedName(QStringLiteral("Друид")) ||
+        normalizedClass == normalizedName(QStringLiteral("Следопыт"))) {
+        return QStringLiteral("Мудрость");
+    }
+    return QStringLiteral("Харизма");
+}
+
+QString pdfBestSpellcastingAbilityName(const Character *character)
+{
+    const QStringList castingClasses = pdfSpellcastingClassNames(character);
+    if (!castingClasses.isEmpty()) {
+        return pdfSpellcastingAbilityName(castingClasses.first());
+    }
+
+    if (!character) {
+        return QStringLiteral("Харизма");
+    }
+
+    const QMap<QString, int> mentalScores = {
+        {QStringLiteral("Интеллект"), character->intelligence},
+        {QStringLiteral("Мудрость"), character->wisdom},
+        {QStringLiteral("Харизма"), character->charisma}
+    };
+
+    QString best = QStringLiteral("Харизма");
+    int bestScore = character->charisma;
+    for (auto it = mentalScores.begin(); it != mentalScores.end(); ++it) {
+        if (it.value() > bestScore) {
+            best = it.key();
+            bestScore = it.value();
+        }
+    }
+    return best;
+}
+
+int pdfSpellcastingAbilityScore(const Character *character, const QString &abilityName)
+{
+    return characterAbilityScore(character, abilityName);
+}
+
+QString pdfSpellcastingStatText(const Character *character)
+{
+    const QString abilityName = pdfBestSpellcastingAbilityName(character);
+    const int score = pdfSpellcastingAbilityScore(character, abilityName);
+    const QString shortName = abilityName == QStringLiteral("Интеллект")
+        ? QStringLiteral("ИНТ")
+        : abilityName == QStringLiteral("Мудрость")
+            ? QStringLiteral("МДР")
+            : QStringLiteral("ХАР");
+    return QStringLiteral("%1 %2 (%3)").arg(shortName).arg(score).arg(pdfSignedValue(Character::abilityModifier(score)));
+}
+
+QMap<int, QStringList> pdfGroupedSpellNames(const Character *character)
+{
+    QMap<int, QStringList> grouped;
+    if (!character) {
+        return grouped;
+    }
+
+    QStringList seen;
+    auto appendSpell = [&](const Spell &spell) {
+        const QString name = spell.name.simplified();
+        if (name.isEmpty()) {
+            return;
+        }
+        const int level = qBound(0, spell.level, 9);
+        const QString key = QStringLiteral("%1|%2").arg(level).arg(normalizedName(name));
+        if (seen.contains(key)) {
+            return;
+        }
+        seen << key;
+        grouped[level] << name;
+    };
+
+    for (const Spell &spell : character->spells) {
+        appendSpell(spell);
+    }
+    for (const Spell &spell : character->spellbook) {
+        appendSpell(spell);
+    }
+
+    for (auto it = grouped.begin(); it != grouped.end(); ++it) {
+        it.value().sort(Qt::CaseInsensitive);
+    }
+
+    return grouped;
+}
+
+void pdfSetFont(QPainter &painter, int pointSize, bool bold = false, bool italic = false)
+{
+    QFont font = painter.font();
+    font.setPointSize(pointSize);
+    font.setBold(bold);
+    font.setItalic(italic);
+    painter.setFont(font);
+}
+
+void pdfDrawPanel(QPainter &painter, const QRectF &rect, const QString &title)
+{
+    painter.save();
+    painter.setPen(QPen(QColor(QStringLiteral("#5e503f")), 1.2));
+    painter.setBrush(QColor(QStringLiteral("#fffaf5")));
+    painter.drawRoundedRect(rect, 9, 9);
+
+    if (!title.isEmpty()) {
+        QRectF strip(rect.left() + 12, rect.top() - 11, qMin(rect.width() - 24, 330.0), 22);
+        painter.fillRect(strip, QColor(QStringLiteral("#ffffff")));
+        painter.setPen(QColor(QStringLiteral("#0a0908")));
+        pdfSetFont(painter, 8, true);
+        painter.drawText(strip.adjusted(6, 0, -6, 0), Qt::AlignVCenter | Qt::AlignLeft, title);
+    }
+    painter.restore();
+}
+
+void pdfDrawField(QPainter &painter, const QRectF &rect, const QString &label, const QString &value, int valuePointSize = 10)
+{
+    painter.save();
+    painter.setPen(QPen(QColor(QStringLiteral("#c6ac8f")), 1.0));
+    painter.setBrush(QColor(QStringLiteral("#fffaf5")));
+    painter.drawRoundedRect(rect, 7, 7);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(QStringLiteral("#eae0d5")));
+    painter.drawRect(QRectF(rect.left() + 1, rect.top() + 1, rect.width() - 2, 20));
+    painter.setPen(QPen(QColor(QStringLiteral("#c6ac8f")), 1.0));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(rect, 7, 7);
+
+    painter.setPen(QColor(QStringLiteral("#0a0908")));
+    pdfSetFont(painter, 7, false);
+    painter.drawText(rect.adjusted(7, 3, -7, -rect.height() + 20), Qt::AlignLeft | Qt::AlignVCenter, label);
+
+    pdfSetFont(painter, valuePointSize, true);
+    painter.setClipRect(rect.adjusted(5, 20, -5, -4));
+    painter.drawText(rect.adjusted(7, 20, -7, -4), Qt::AlignLeft | Qt::AlignVCenter | Qt::TextWordWrap, pdfDashIfEmpty(value));
+    painter.restore();
+}
+
+void pdfDrawAbilityBox(QPainter &painter, const QRectF &rect, const QString &label, int score)
+{
+    painter.save();
+    painter.setPen(QPen(QColor(QStringLiteral("#5e503f")), 1.1));
+    painter.setBrush(QColor(QStringLiteral("#fffaf5")));
+    painter.drawRoundedRect(rect, 12, 12);
+
+    painter.setPen(QColor(QStringLiteral("#0a0908")));
+    pdfSetFont(painter, 9, true);
+    painter.drawText(QRectF(rect.left() + 7, rect.top() + 8, rect.width() - 14, 20), Qt::AlignCenter, label.toUpper());
+
+    pdfSetFont(painter, 21, true);
+    painter.drawText(QRectF(rect.left() + 10, rect.top() + 35, rect.width() - 20, 42), Qt::AlignCenter, pdfSignedValue(Character::abilityModifier(score)));
+
+    painter.setPen(QPen(QColor(QStringLiteral("#c6ac8f")), 1.0));
+    painter.setBrush(QColor(QStringLiteral("#ffffff")));
+    const QRectF scoreRect(rect.left() + rect.width() * 0.22, rect.bottom() - 33, rect.width() * 0.56, 27);
+    painter.drawRoundedRect(scoreRect, 13, 13);
+    painter.setPen(QColor(QStringLiteral("#0a0908")));
+    pdfSetFont(painter, 11, true);
+    painter.drawText(scoreRect, Qt::AlignCenter, QString::number(score));
+    painter.restore();
+}
+
+void pdfDrawTextBlock(QPainter &painter, const QRectF &rect, const QString &title, const QString &text, int pointSize = 8)
+{
+    pdfDrawPanel(painter, rect, title);
+    painter.save();
+    painter.setPen(QColor(QStringLiteral("#0a0908")));
+    pdfSetFont(painter, pointSize);
+    const QRectF textRect = rect.adjusted(12, 22, -12, -12);
+    painter.setClipRect(textRect);
+    painter.drawText(textRect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, pdfDashIfBlank(text));
+    painter.restore();
+}
+
+void pdfDrawLineList(QPainter &painter, const QRectF &rect, const QString &title, QStringList lines, int pointSize = 8)
+{
+    if (lines.isEmpty()) {
+        lines << QStringLiteral("-");
+    }
+
+    pdfDrawPanel(painter, rect, title);
+    painter.save();
+    painter.setPen(QColor(QStringLiteral("#0a0908")));
+    pdfSetFont(painter, pointSize);
+    QFontMetrics metrics(painter.font());
+    const qreal left = rect.left() + 12;
+    qreal y = rect.top() + 25;
+    const qreal right = rect.right() - 12;
+    const qreal bottom = rect.bottom() - 10;
+    const int lineHeight = metrics.lineSpacing() + 2;
+
+    for (const QString &rawLine : lines) {
+        if (y + lineHeight > bottom) {
+            painter.drawText(QRectF(left, y, right - left, lineHeight), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("..."));
+            break;
+        }
+        const QString line = metrics.elidedText(rawLine.simplified(), Qt::ElideRight, static_cast<int>(right - left));
+        painter.drawText(QRectF(left, y, right - left, lineHeight), Qt::AlignLeft | Qt::AlignVCenter, line);
+        y += lineHeight;
+    }
+
+    painter.restore();
+}
+
+void pdfDrawSpellLevelBlock(QPainter &painter, const QRectF &rect, int level, const QStringList &spells)
+{
+    painter.save();
+    painter.setPen(QPen(QColor(QStringLiteral("#5e503f")), 1.1));
+    painter.setBrush(QColor(QStringLiteral("#ffffff")));
+    painter.drawRoundedRect(rect, 8, 8);
+
+    const QRectF headerRect(rect.left() + 42, rect.top() + 10, rect.width() - 54, 38);
+    painter.setPen(QPen(QColor(QStringLiteral("#0a0908")), 1.0));
+    painter.setBrush(QColor(QStringLiteral("#dfe6ff")));
+    painter.drawRoundedRect(headerRect, 8, 8);
+
+    const QRectF levelRect(rect.left() + 9, rect.top() + 8, 32, 42);
+    painter.setBrush(QColor(QStringLiteral("#fffaf5")));
+    painter.drawRoundedRect(levelRect, 8, 8);
+    pdfSetFont(painter, 12, true);
+    painter.drawText(levelRect, Qt::AlignCenter, QString::number(level));
+
+    pdfSetFont(painter, 8, true);
+    painter.drawText(headerRect.adjusted(10, 0, -10, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                     level == 0 ? QStringLiteral("Заговоры") : QStringLiteral("%1 уровень").arg(level));
+
+    pdfSetFont(painter, 7);
+    QFontMetrics metrics(painter.font());
+    const qreal left = rect.left() + 20;
+    const qreal right = rect.right() - 14;
+    qreal y = rect.top() + 62;
+    const qreal bottom = rect.bottom() - 14;
+    const int lineHeight = metrics.lineSpacing() + 6;
+    const int visibleRows = qMax(1, static_cast<int>((bottom - y) / lineHeight));
+    const int rowCount = qMax(visibleRows, qMin(visibleRows, spells.size()));
+
+    painter.setPen(QPen(QColor(QStringLiteral("#b9c7f4")), 0.8));
+    for (int row = 0; row < visibleRows; ++row) {
+        const QRectF lineRect(left + 18, y + row * lineHeight + 3, right - left - 18, 13);
+        painter.fillRect(lineRect, QColor(QStringLiteral("#e6ebff")));
+        painter.drawLine(QPointF(lineRect.left(), lineRect.bottom() + 2), QPointF(lineRect.right(), lineRect.bottom() + 2));
+    }
+
+    painter.setPen(QColor(QStringLiteral("#0a0908")));
+    for (int index = 0; index < rowCount; ++index) {
+        const QRectF checkRect(left, y + index * lineHeight + 5, 7, 7);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(checkRect);
+
+        if (index >= spells.size()) {
+            continue;
+        }
+        QString spellName = metrics.elidedText(spells.at(index), Qt::ElideRight, static_cast<int>(right - left - 24));
+        painter.drawText(QRectF(left + 18, y + index * lineHeight - 1, right - left - 18, lineHeight),
+                         Qt::AlignLeft | Qt::AlignVCenter, spellName);
+    }
+
+    if (spells.size() > visibleRows) {
+        painter.drawText(QRectF(left + 18, bottom - lineHeight, right - left - 18, lineHeight),
+                         Qt::AlignRight | Qt::AlignVCenter,
+                         QStringLiteral("... ещё %1").arg(spells.size() - visibleRows));
+    }
+
+    painter.restore();
+}
+
+QStringList pdfCheckLines(const Character *character, const QList<PdfNamedAbilityEntry> &entries, const QStringList &proficiencies)
+{
+    QStringList lines;
+    if (!character) {
+        return lines;
+    }
+
+    const QStringList normalizedProficiencies = pdfNormalizedList(proficiencies);
+    for (const PdfNamedAbilityEntry &entry : entries) {
+        const bool proficient = normalizedProficiencies.contains(normalizedName(entry.name));
+        const int baseModifier = Character::abilityModifier(characterAbilityScore(character, entry.ability));
+        const int totalModifier = baseModifier + (proficient ? character->proficiencyBonus : 0);
+        lines << QStringLiteral("[%1] %2 %3")
+                     .arg(proficient ? QStringLiteral("x") : QStringLiteral(" "))
+                     .arg(entry.name)
+                     .arg(pdfSignedValue(totalModifier));
+    }
+    return lines;
+}
+
+void pdfPreparePage(QPainter &painter)
+{
+    painter.setWindow(0, 0, 1190, 1684);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.fillRect(QRectF(0, 0, 1190, 1684), QColor(QStringLiteral("#ffffff")));
+}
+
+void pdfDrawFooter(QPainter &painter, int pageNumber)
+{
+    painter.save();
+    painter.setPen(QColor(QStringLiteral("#5e503f")));
+    pdfSetFont(painter, 7);
+    painter.drawText(QRectF(30, 1645, 1130, 22), Qt::AlignCenter, QStringLiteral("DnD Helper - лист персонажа - стр. %1").arg(pageNumber));
+    painter.restore();
+}
+
+void pdfDrawPageTitle(QPainter &painter, const QString &title)
+{
+    painter.save();
+    painter.setPen(QColor(QStringLiteral("#a5382f")));
+    pdfSetFont(painter, 18, true);
+    painter.drawText(QRectF(30, 18, 1130, 32), Qt::AlignLeft | Qt::AlignVCenter, title);
+    painter.setPen(QPen(QColor(QStringLiteral("#5e503f")), 1.3));
+    painter.drawLine(QPointF(30, 58), QPointF(1160, 58));
+    painter.restore();
+}
+
+void pdfDrawCharacterHeader(QPainter &painter, const Character *character)
+{
+    pdfDrawPanel(painter, QRectF(30, 70, 1130, 165), QString());
+    pdfDrawField(painter, QRectF(50, 92, 350, 58), QStringLiteral("Имя персонажа"), character ? character->name() : QString());
+    pdfDrawField(painter, QRectF(420, 92, 420, 58), QStringLiteral("Класс и уровень"), pdfClassSummary(character), 9);
+    pdfDrawField(painter, QRectF(860, 92, 280, 58), QStringLiteral("Предыстория"), character ? character->background : QString());
+    pdfDrawField(painter, QRectF(50, 162, 250, 52), QStringLiteral("Раса"), character ? character->race() : QString());
+    pdfDrawField(painter, QRectF(320, 162, 250, 52), QStringLiteral("Мировоззрение"), character ? character->alignment : QString());
+    pdfDrawField(painter, QRectF(590, 162, 170, 52), QStringLiteral("Опыт"), character ? QString::number(character->experiencePoints) : QString());
+    pdfDrawField(painter, QRectF(780, 162, 170, 52), QStringLiteral("Бонус мастерства"), character ? pdfSignedValue(character->proficiencyBonus) : QString());
+    pdfDrawField(painter, QRectF(970, 162, 170, 52), QStringLiteral("Размер"), character ? character->size : QString());
+}
+
+void pdfDrawCharacterSheetPage(QPainter &painter, const Character *character)
+{
+    pdfPreparePage(painter);
+    pdfDrawPageTitle(painter, QStringLiteral("Лист персонажа"));
+    pdfDrawCharacterHeader(painter, character);
+
+    const QList<QPair<QString, int>> abilities = {
+        {QStringLiteral("Сила"), character ? character->strength : 10},
+        {QStringLiteral("Ловкость"), character ? character->dexterity : 10},
+        {QStringLiteral("Телосложение"), character ? character->constitution : 10},
+        {QStringLiteral("Интеллект"), character ? character->intelligence : 10},
+        {QStringLiteral("Мудрость"), character ? character->wisdom : 10},
+        {QStringLiteral("Харизма"), character ? character->charisma : 10}
+    };
+
+    qreal abilityY = 275;
+    for (const auto &ability : abilities) {
+        pdfDrawAbilityBox(painter, QRectF(30, abilityY, 225, 118), ability.first, ability.second);
+        abilityY += 128;
+    }
+
+    pdfDrawPanel(painter, QRectF(275, 275, 280, 310), QStringLiteral("Боевые параметры"));
+    pdfDrawField(painter, QRectF(292, 305, 75, 58), QStringLiteral("КД"), character ? QString::number(character->armorClass) : QString(), 12);
+    pdfDrawField(painter, QRectF(382, 305, 75, 58), QStringLiteral("Инициатива"), character ? pdfSignedValue(character->initiative) : QString(), 12);
+    pdfDrawField(painter, QRectF(472, 305, 65, 58), QStringLiteral("Скорость"), pdfSpeedSummary(character), 9);
+    pdfDrawField(painter, QRectF(292, 378, 245, 52), QStringLiteral("Хиты максимум"), character ? QString::number(character->maxHp) : QString(), 11);
+    pdfDrawField(painter, QRectF(292, 438, 245, 52), QStringLiteral("Хиты текущие"), character ? QString::number(character->currentHp) : QString(), 11);
+    pdfDrawField(painter, QRectF(292, 498, 245, 52), QStringLiteral("Временные хиты"), character ? QString::number(character->tempHp) : QString(), 11);
+
+    pdfDrawLineList(
+        painter,
+        QRectF(275, 610, 280, 190),
+        QStringLiteral("Спасброски"),
+        pdfCheckLines(character, pdfSavingThrowDefinitions(), character ? character->savingThrowProficiencies : QStringList()),
+        8);
+
+    pdfDrawLineList(
+        painter,
+        QRectF(275, 825, 280, 490),
+        QStringLiteral("Навыки"),
+        pdfCheckLines(character, pdfSkillDefinitions(), character ? character->skillProficiencies : QStringList()),
+        7);
+
+    pdfDrawLineList(
+        painter,
+        QRectF(275, 1340, 280, 185),
+        QStringLiteral("Владения и языки"),
+        pdfProficiencyLines(character),
+        7);
+
+    pdfDrawTextBlock(
+        painter,
+        QRectF(580, 275, 580, 420),
+        QStringLiteral("Инвентарь"),
+        pdfInventoryLines(character).isEmpty()
+            ? QStringLiteral("Инвентарь пуст.")
+            : pdfInventoryLines(character).join(QStringLiteral("\n")),
+        8);
+
+    pdfDrawTextBlock(
+        painter,
+        QRectF(580, 725, 580, 560),
+        QStringLiteral("Черты, умения и особенности"),
+        pdfFeatureLines(character).join(QStringLiteral("\n\n")),
+        8);
+
+    QStringList attackLines = character ? character->attacks : QStringList();
+    pdfDrawLineList(
+        painter,
+        QRectF(580, 1315, 580, 210),
+        QStringLiteral("Атаки"),
+        attackLines.isEmpty() ? QStringList{QStringLiteral("Атаки не заполнены.")} : attackLines,
+        8);
+
+    pdfDrawFooter(painter, 1);
+}
+
+void pdfDrawCharacterDetailsPage(QPainter &painter, const Character *character)
+{
+    pdfPreparePage(painter);
+    pdfDrawPageTitle(painter, QStringLiteral("История, снаряжение и заметки"));
+
+    pdfDrawField(painter, QRectF(30, 75, 360, 60), QStringLiteral("Имя персонажа"), character ? character->name() : QString());
+    pdfDrawField(painter, QRectF(410, 75, 360, 60), QStringLiteral("Класс и уровень"), pdfClassSummary(character), 9);
+    pdfDrawField(painter, QRectF(790, 75, 370, 60), QStringLiteral("Раса и предыстория"),
+                 character ? QStringLiteral("%1, %2").arg(pdfDashIfEmpty(character->race()), pdfDashIfEmpty(character->background)) : QString(), 9);
+
+    pdfDrawTextBlock(
+        painter,
+        QRectF(30, 170, 540, 515),
+        QStringLiteral("История и внешность"),
+        pdfAppearanceLines(character).join(QStringLiteral("\n")),
+        8);
+
+    pdfDrawTextBlock(
+        painter,
+        QRectF(590, 170, 570, 260),
+        QStringLiteral("Атаки и боевые заметки"),
+        (character && !character->attacks.isEmpty()) ? character->attacks.join(QStringLiteral("\n")) : QStringLiteral("Атаки не заполнены."),
+        8);
+
+    pdfDrawTextBlock(
+        painter,
+        QRectF(590, 460, 570, 560),
+        QStringLiteral("Дополнительные черты"),
+        pdfFeatureLines(character).join(QStringLiteral("\n\n")),
+        8);
+
+    pdfDrawTextBlock(
+        painter,
+        QRectF(30, 715, 540, 350),
+        QStringLiteral("Владения, языки и источники"),
+        pdfProficiencyLines(character).join(QStringLiteral("\n")),
+        8);
+
+    QString notes;
+    if (character) {
+        QStringList noteLines;
+        if (!character->backgroundDescription.simplified().isEmpty()) {
+            noteLines << QStringLiteral("Описание предыстории:");
+            noteLines << character->backgroundDescription.simplified();
+        }
+        notes = noteLines.join(QStringLiteral("\n"));
+    }
+
+    pdfDrawTextBlock(
+        painter,
+        QRectF(30, 1095, 540, 430),
+        QStringLiteral("Заметки персонажа"),
+        notes,
+        8);
+
+    QStringList backgroundLines;
+    if (character) {
+        backgroundLines << QStringLiteral("Предыстория: %1").arg(pdfDashIfEmpty(character->background));
+        if (!character->backgroundFeatureName.simplified().isEmpty()) {
+            backgroundLines << QString();
+            backgroundLines << QStringLiteral("Умение предыстории: %1").arg(character->backgroundFeatureName.simplified());
+        }
+        if (!character->backgroundFeatureDescription.trimmed().isEmpty()) {
+            backgroundLines << character->backgroundFeatureDescription.trimmed();
+        }
+        if (!character->backgroundDescription.trimmed().isEmpty()) {
+            backgroundLines << QString();
+            backgroundLines << character->backgroundDescription.trimmed();
+        }
+    }
+
+    pdfDrawTextBlock(
+        painter,
+        QRectF(590, 1050, 570, 475),
+        QStringLiteral("Предыстория"),
+        backgroundLines.join(QStringLiteral("\n")),
+        8);
+
+    pdfDrawFooter(painter, 2);
+}
+
+void pdfDrawSpellSheetPage(QPainter &painter, const Character *character)
+{
+    pdfPreparePage(painter);
+    pdfDrawPageTitle(painter, QStringLiteral("Лист заклинаний"));
+
+    const QStringList castingClasses = pdfSpellcastingClassNames(character);
+    const QString abilityName = pdfBestSpellcastingAbilityName(character);
+    const int abilityScore = pdfSpellcastingAbilityScore(character, abilityName);
+    const int abilityModifier = Character::abilityModifier(abilityScore);
+    const int spellSaveDc = character ? 8 + character->proficiencyBonus + abilityModifier : 8;
+    const int spellAttackBonus = character ? character->proficiencyBonus + abilityModifier : 0;
+
+    pdfDrawPanel(painter, QRectF(30, 74, 1130, 165), QString());
+    pdfDrawField(
+        painter,
+        QRectF(55, 100, 360, 60),
+        QStringLiteral("Класс заклинателя"),
+        castingClasses.isEmpty() ? pdfClassSummary(character) : castingClasses.join(QStringLiteral(" / ")),
+        9);
+    pdfDrawField(
+        painter,
+        QRectF(450, 100, 210, 60),
+        QStringLiteral("Базовая характеристика"),
+        pdfSpellcastingStatText(character),
+        10);
+    pdfDrawField(
+        painter,
+        QRectF(695, 100, 190, 60),
+        QStringLiteral("Сл спасброска"),
+        QString::number(spellSaveDc),
+        13);
+    pdfDrawField(
+        painter,
+        QRectF(920, 100, 190, 60),
+        QStringLiteral("Бонус атаки"),
+        pdfSignedValue(spellAttackBonus),
+        13);
+
+    pdfDrawLineList(
+        painter,
+        QRectF(55, 175, 1055, 70),
+        QStringLiteral("Ячейки заклинаний"),
+        pdfSpellSlotLines(character).isEmpty()
+            ? QStringList{QStringLiteral("На текущих уровнях расходуемые ячейки не заполнены.")}
+            : pdfSpellSlotLines(character),
+        7);
+
+    const QMap<int, QStringList> groupedSpells = pdfGroupedSpellNames(character);
+
+    const qreal leftX = 45;
+    const qreal middleX = 430;
+    const qreal rightX = 815;
+    const qreal columnWidth = 330;
+
+    pdfDrawSpellLevelBlock(painter, QRectF(leftX, 270, columnWidth, 300), 0, groupedSpells.value(0));
+    pdfDrawSpellLevelBlock(painter, QRectF(leftX, 600, columnWidth, 390), 1, groupedSpells.value(1));
+    pdfDrawSpellLevelBlock(painter, QRectF(leftX, 1020, columnWidth, 420), 2, groupedSpells.value(2));
+
+    pdfDrawSpellLevelBlock(painter, QRectF(middleX, 270, columnWidth, 390), 3, groupedSpells.value(3));
+    pdfDrawSpellLevelBlock(painter, QRectF(middleX, 690, columnWidth, 390), 4, groupedSpells.value(4));
+    pdfDrawSpellLevelBlock(painter, QRectF(middleX, 1110, columnWidth, 330), 5, groupedSpells.value(5));
+
+    pdfDrawSpellLevelBlock(painter, QRectF(rightX, 270, columnWidth, 270), 6, groupedSpells.value(6));
+    pdfDrawSpellLevelBlock(painter, QRectF(rightX, 570, columnWidth, 270), 7, groupedSpells.value(7));
+    pdfDrawSpellLevelBlock(painter, QRectF(rightX, 870, columnWidth, 270), 8, groupedSpells.value(8));
+    pdfDrawSpellLevelBlock(painter, QRectF(rightX, 1170, columnWidth, 270), 9, groupedSpells.value(9));
+
+    pdfDrawFooter(painter, 3);
+}
+
 }
 
 PlayerPage::PlayerPage(QWidget *parent)
@@ -2357,6 +3218,7 @@ void PlayerPage::setupUi()
     infoLayout->addWidget(characterSheet, 1);
 
     QPushButton *exportPdfBtn = new QPushButton(QStringLiteral("Экспорт в PDF"));
+    connect(exportPdfBtn, &QPushButton::clicked, this, &PlayerPage::exportCurrentCharacterToPdf);
     infoLayout->addWidget(exportPdfBtn, 0, Qt::AlignRight);
 
     charStack->addWidget(charInfoPage);
@@ -4670,6 +5532,65 @@ void PlayerPage::completeCharacterCreation()
     }
 
     QMessageBox::information(this, "Персонаж создан", completionMessage);
+}
+
+void PlayerPage::exportCurrentCharacterToPdf()
+{
+    if (!currentCharacter) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Экспорт в PDF"),
+            QStringLiteral("Сначала создайте или загрузите персонажа."));
+        return;
+    }
+
+    QString safeName = currentCharacter->name().trimmed();
+    if (safeName.isEmpty()) {
+        safeName = QStringLiteral("Лист персонажа");
+    }
+    safeName.replace(QRegularExpression(QStringLiteral("[\\\\/:*?\"<>|]")), QStringLiteral("_"));
+
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        QStringLiteral("Экспорт персонажа в PDF"),
+        QDir::home().filePath(safeName + QStringLiteral(".pdf")),
+        QStringLiteral("PDF (*.pdf)"));
+
+    if (filePath.trimmed().isEmpty()) {
+        return;
+    }
+    if (!filePath.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive)) {
+        filePath += QStringLiteral(".pdf");
+    }
+
+    QPdfWriter writer(filePath);
+    writer.setCreator(QStringLiteral("DnD Helper"));
+    writer.setTitle(QStringLiteral("Лист персонажа: %1").arg(currentCharacter->name()));
+    writer.setResolution(144);
+    writer.setPageSize(QPageSize(QPageSize::A4));
+
+    QPainter painter;
+    if (!painter.begin(&writer)) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Экспорт в PDF"),
+            QStringLiteral("Не удалось создать PDF-файл:\n%1").arg(QDir::toNativeSeparators(filePath)));
+        return;
+    }
+
+    pdfDrawCharacterSheetPage(painter, currentCharacter);
+    writer.newPage();
+    pdfDrawCharacterDetailsPage(painter, currentCharacter);
+    if (!currentCharacter->spells.isEmpty() || !currentCharacter->spellbook.isEmpty()) {
+        writer.newPage();
+        pdfDrawSpellSheetPage(painter, currentCharacter);
+    }
+    painter.end();
+
+    QMessageBox::information(
+        this,
+        QStringLiteral("Экспорт в PDF"),
+        QStringLiteral("PDF-лист персонажа сохранён:\n%1").arg(QDir::toNativeSeparators(filePath)));
 }
 
 void PlayerPage::onRaceChosen(const Race &race)

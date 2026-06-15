@@ -12,5 +12,6 @@
         <file>DndHelperDesign/DndHelperDesignContent/PageController.qml</file>
         <file>DndHelperDesign/DndHelperDesignContent/RasaButtonAnimation.qml</file>
         <file>DndHelperDesign/DndHelperDesignContent/Screen01.ui.qml</file>
+        <file>DndHelperDesign/DndHelperDesignContent/images/ui/combo_down_arrow.png</file>
     </qresource>
 </RCC>

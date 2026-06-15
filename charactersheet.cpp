@@ -33,7 +33,12 @@
 #include <QSplitter>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTimer>
+#include <QTextBlockFormat>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <QTextEdit>
+#include <QTextOption>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -44,6 +49,44 @@ namespace {
 QString normalizedName(QString value)
 {
     return value.simplified().toLower();
+}
+
+void enforceLeftToRightTextEdit(QTextEdit *edit)
+{
+    if (!edit) {
+        return;
+    }
+
+    QSignalBlocker blocker(edit);
+    const int cursorPosition = edit->textCursor().position();
+    const int cursorAnchor = edit->textCursor().anchor();
+
+    edit->setAcceptRichText(false);
+    edit->setLayoutDirection(Qt::LeftToRight);
+    edit->setAlignment(Qt::AlignLeft);
+
+    QTextOption option = edit->document()->defaultTextOption();
+    option.setTextDirection(Qt::LeftToRight);
+    option.setAlignment(Qt::AlignLeft);
+    edit->document()->setDefaultTextOption(option);
+
+    QTextCursor documentCursor(edit->document());
+    documentCursor.select(QTextCursor::Document);
+    QTextBlockFormat blockFormat;
+    blockFormat.setLayoutDirection(Qt::LeftToRight);
+    blockFormat.setAlignment(Qt::AlignLeft);
+    documentCursor.mergeBlockFormat(blockFormat);
+
+    QTextCursor currentCursor(edit->document());
+    const int safeAnchor = qBound(0, cursorAnchor, edit->document()->characterCount() - 1);
+    const int safePosition = qBound(0, cursorPosition, edit->document()->characterCount() - 1);
+    currentCursor.setPosition(safeAnchor);
+    currentCursor.setPosition(
+        safePosition,
+        safeAnchor == safePosition ? QTextCursor::MoveAnchor : QTextCursor::KeepAnchor);
+    currentCursor.setVisualNavigation(false);
+    currentCursor.mergeBlockFormat(blockFormat);
+    edit->setTextCursor(currentCursor);
 }
 
 QString scoreWithModifier(int score)
@@ -747,6 +790,35 @@ CharacterSheet::~CharacterSheet()
     delete ui;
 }
 
+bool CharacterSheet::eventFilter(QObject *watched, QEvent *event)
+{
+    QTextEdit *textEdit = nullptr;
+    if (watched == ui->appearanceEdit) {
+        textEdit = ui->appearanceEdit;
+    } else if (watched == historyEdit) {
+        textEdit = historyEdit;
+    }
+
+    if (textEdit) {
+        switch (event->type()) {
+        case QEvent::FocusIn:
+        case QEvent::KeyPress:
+        case QEvent::InputMethod:
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonRelease:
+            enforceLeftToRightTextEdit(textEdit);
+            QTimer::singleShot(0, textEdit, [textEdit]() {
+                enforceLeftToRightTextEdit(textEdit);
+            });
+            break;
+        default:
+            break;
+        }
+    }
+
+    return QWidget::eventFilter(watched, event);
+}
+
 void CharacterSheet::setupExtendedSections()
 {
     ui->horizontalLayout_Main->setSpacing(8);
@@ -793,6 +865,8 @@ void CharacterSheet::setupExtendedSections()
     QVBoxLayout *historyGroupLayout = new QVBoxLayout(historyGroup);
     historyEdit = new QTextEdit(historyGroup);
     historyEdit->setPlaceholderText(QStringLiteral("Происхождение, мотивация, связи, важные события и личная история персонажа."));
+    enforceLeftToRightTextEdit(historyEdit);
+    historyEdit->installEventFilter(this);
     historyGroup->setTitle(QStringLiteral("История и внешность"));
 
     QGridLayout *appearanceLayout = new QGridLayout();
@@ -813,6 +887,8 @@ void CharacterSheet::setupExtendedSections()
     historyGroupLayout->addLayout(appearanceLayout);
     historyGroupLayout->addWidget(ui->label_desc);
     ui->appearanceEdit->setMinimumHeight(90);
+    enforceLeftToRightTextEdit(ui->appearanceEdit);
+    ui->appearanceEdit->installEventFilter(this);
     historyGroupLayout->addWidget(ui->appearanceEdit);
 
     QFrame *historyDivider = new QFrame(historyGroup);
@@ -829,6 +905,19 @@ void CharacterSheet::setupExtendedSections()
     historyLayout->addWidget(historyGroup);
     historyLayout->addStretch();
     detailsTabs->addTab(historyTab, QStringLiteral("История"));
+
+    connect(ui->appearanceEdit, &QTextEdit::cursorPositionChanged, this, [this]() {
+        enforceLeftToRightTextEdit(ui->appearanceEdit);
+    });
+    connect(ui->appearanceEdit, &QTextEdit::textChanged, this, [this]() {
+        enforceLeftToRightTextEdit(ui->appearanceEdit);
+    });
+    connect(historyEdit, &QTextEdit::cursorPositionChanged, this, [this]() {
+        enforceLeftToRightTextEdit(historyEdit);
+    });
+    connect(historyEdit, &QTextEdit::textChanged, this, [this]() {
+        enforceLeftToRightTextEdit(historyEdit);
+    });
 
     QGroupBox *overviewGroup = new QGroupBox(QStringLiteral("Навыки и спасброски"), this);
     overviewGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
@@ -1255,6 +1344,7 @@ void CharacterSheet::updateFromCharacter()
     }
     {
         QSignalBlocker blocker(ui->appearanceEdit);
+        enforceLeftToRightTextEdit(ui->appearanceEdit);
         ui->appearanceEdit->setPlainText(m_character->appearance);
     }
     {
@@ -1355,6 +1445,7 @@ void CharacterSheet::updateNarrativeSection()
     }
 
     QSignalBlocker blocker(historyEdit);
+    enforceLeftToRightTextEdit(historyEdit);
     historyEdit->setPlainText(m_character ? m_character->personalHistory : QString());
 }
 

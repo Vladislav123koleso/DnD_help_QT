@@ -7,6 +7,7 @@
 
 QT_BEGIN_NAMESPACE
 class QComboBox;
+class QEvent;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -32,6 +33,9 @@ public:
     ~CharacterSheet();
 
     void setCharacter(Character *c);
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
     void characterUpdated();
