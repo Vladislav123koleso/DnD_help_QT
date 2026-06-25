@@ -1,5 +1,6 @@
 #include "class_selection_page.h"
 #include <algorithm>
+#include <utility>
 #include <QVBoxLayout>
 #include <QScrollArea>
 #include <QDebug>
@@ -11,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QRegularExpression>
 #include "flowlayout.h"
 
 ClassSelectionPage::ClassSelectionPage(QWidget *parent) : QWidget(parent) {
@@ -74,27 +76,60 @@ QString ClassSelectionPage::resolveClassesJsonPath() const
 
 QString ClassSelectionPage::detectImagePath(const QString &classSlug) const
 {
-    QString basePath;
+    QString token = classSlug.trimmed().toLower();
+    if (token.contains('/')) {
+        token = token.section('/', -1);
+    }
+    token.remove(QRegularExpression(QStringLiteral("^\\d+-")));
+    token.replace(QLatin1Char('-'), QLatin1Char('_'));
+    token.replace(QLatin1Char(' '), QLatin1Char('_'));
+
+    QStringList basePaths;
+    basePaths << QStringLiteral("images/classes");
+    basePaths << QDir::current().filePath(QStringLiteral("images/classes"));
+    const QFileInfo jsonInfo(resolveClassesJsonPath());
+    if (jsonInfo.exists()) {
+        basePaths << jsonInfo.dir().filePath(QStringLiteral("images/classes"));
+    }
+
     QDir dir(QCoreApplication::applicationDirPath());
     for (int i = 0; i < 6; ++i) {
+        if (dir.exists(QStringLiteral("images/classes"))) {
+            basePaths << dir.filePath(QStringLiteral("images/classes"));
+        }
         if (dir.exists("DndHelperDesign/DndHelperDesignContent/images/class")) {
-            basePath = dir.filePath("DndHelperDesign/DndHelperDesignContent/images/class/");
-            break;
+            basePaths << dir.filePath("DndHelperDesign/DndHelperDesignContent/images/class");
         }
         if (!dir.cdUp()) {
             break;
         }
     }
 
-    if (basePath.isEmpty() || classSlug.trimmed().isEmpty()) {
+    if (token.isEmpty() && classSlug.trimmed().isEmpty()) {
         return QString();
     }
 
     const QStringList extensions = {"jpg", "png", "webp", "jpeg"};
-    for (const QString &extension : extensions) {
-        const QString candidate = basePath + classSlug + "." + extension;
-        if (QFile::exists(candidate)) {
-            return candidate;
+    const QStringList names = token.isEmpty()
+        ? QStringList{classSlug.trimmed()}
+        : QStringList{token, classSlug.trimmed()};
+
+    for (const QString &basePath : std::as_const(basePaths)) {
+        const QDir baseDir(basePath);
+        if (!baseDir.exists()) {
+            continue;
+        }
+
+        for (const QString &name : names) {
+            if (name.isEmpty()) {
+                continue;
+            }
+            for (const QString &extension : extensions) {
+                const QString candidate = baseDir.filePath(name + "." + extension);
+                if (QFile::exists(candidate)) {
+                    return candidate;
+                }
+            }
         }
     }
 

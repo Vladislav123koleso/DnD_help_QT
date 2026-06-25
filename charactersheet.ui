@@ -6,502 +6,359 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>850</width>
-    <height>700</height>
+    <width>1180</width>
+    <height>820</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string>Лист персонажа</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
-   <property name="spacing">
-    <number>10</number>
-   </property>
+   <property name="spacing"><number>10</number></property>
+   <property name="leftMargin"><number>12</number></property>
+   <property name="topMargin"><number>10</number></property>
+   <property name="rightMargin"><number>12</number></property>
+   <property name="bottomMargin"><number>12</number></property>
    <item>
     <widget class="QGroupBox" name="headerGroup">
-     <property name="title">
-      <string>Основные данные</string>
-     </property>
+     <property name="title"><string>Основные данные</string></property>
      <layout class="QGridLayout" name="gridLayout_Header">
-      <item row="0" column="0">
-       <widget class="QLabel" name="label_name">
-        <property name="text">
-         <string>Имя персонажа</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QLineEdit" name="nameEdit">
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="2">
-       <widget class="QLabel" name="label_class">
-        <property name="text">
-         <string>Класс и Уровень</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="3">
-       <widget class="QLineEdit" name="classLevelEdit">
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="4">
-       <widget class="QLabel" name="label_background">
-        <property name="text">
-         <string>Предыстория</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="5">
-       <widget class="QLineEdit" name="backgroundEdit"/>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="label_race">
-        <property name="text">
-         <string>Раса</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QLineEdit" name="raceEdit">
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="2">
-       <widget class="QLabel" name="label_alignment">
-        <property name="text">
-         <string>Мировоззрение</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="3">
-       <widget class="QComboBox" name="alignmentCombo"/>
-      </item>
-      <item row="1" column="4">
-       <widget class="QLabel" name="label_xp">
-        <property name="text">
-         <string>Опыт</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="5">
-       <widget class="QLineEdit" name="xpEdit">
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
+      <property name="horizontalSpacing"><number>8</number></property>
+      <property name="verticalSpacing"><number>8</number></property>
+      <property name="leftMargin"><number>12</number></property>
+      <property name="topMargin"><number>8</number></property>
+      <property name="rightMargin"><number>12</number></property>
+      <property name="bottomMargin"><number>12</number></property>
+      <item row="0" column="0"><widget class="QLabel" name="label_name"><property name="text"><string>Имя персонажа</string></property></widget></item>
+      <item row="0" column="1"><widget class="QLineEdit" name="nameEdit"><property name="readOnly"><bool>false</bool></property><property name="clearButtonEnabled"><bool>true</bool></property></widget></item>
+      <item row="0" column="2"><widget class="QLabel" name="label_class"><property name="text"><string>Класс и уровень</string></property></widget></item>
+      <item row="0" column="3"><widget class="QLineEdit" name="classLevelEdit"><property name="readOnly"><bool>true</bool></property></widget></item>
+      <item row="0" column="4"><widget class="QLabel" name="label_background"><property name="text"><string>Предыстория</string></property></widget></item>
+      <item row="0" column="5"><widget class="QLineEdit" name="backgroundEdit"/></item>
+      <item row="1" column="0"><widget class="QLabel" name="label_race"><property name="text"><string>Раса</string></property></widget></item>
+      <item row="1" column="1"><widget class="QLineEdit" name="raceEdit"><property name="readOnly"><bool>true</bool></property></widget></item>
+      <item row="1" column="2"><widget class="QLabel" name="label_alignment"><property name="text"><string>Мировоззрение</string></property></widget></item>
+      <item row="1" column="3"><widget class="QComboBox" name="alignmentCombo"/></item>
+      <item row="1" column="4"><widget class="QLabel" name="label_xp"><property name="text"><string>Опыт</string></property></widget></item>
+      <item row="1" column="5"><widget class="QLineEdit" name="xpEdit"><property name="readOnly"><bool>true</bool></property></widget></item>
      </layout>
     </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_Main">
-     <item>
-      <widget class="QGroupBox" name="statsGroup">
-       <property name="title">
-        <string>Характеристики</string>
-       </property>
-       <layout class="QVBoxLayout" name="verticalLayout_Stats">
-        <item>
-         <layout class="QHBoxLayout" name="layout_str">
+    <widget class="QWidget" name="detailsAreaWidget" native="true">
+     <layout class="QHBoxLayout" name="detailsAreaLayout">
+      <property name="spacing"><number>12</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QWidget" name="leftColumnWidget" native="true">
+        <property name="minimumSize"><size><width>548</width><height>0</height></size></property>
+        <property name="maximumSize"><size><width>548</width><height>16777215</height></size></property>
+        <layout class="QVBoxLayout" name="leftColumnLayout">
+         <property name="spacing"><number>10</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <item>
+          <widget class="QWidget" name="topGroupsWidget" native="true">
+           <layout class="QHBoxLayout" name="horizontalLayout_Main">
+            <property name="spacing"><number>10</number></property>
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+            <item>
+             <widget class="QGroupBox" name="statsGroup">
+              <property name="minimumSize"><size><width>250</width><height>0</height></size></property>
+              <property name="maximumSize"><size><width>250</width><height>16777215</height></size></property>
+              <property name="title"><string>Характеристики</string></property>
+              <layout class="QVBoxLayout" name="verticalLayout_Stats">
+               <property name="spacing"><number>6</number></property>
+               <property name="leftMargin"><number>10</number></property>
+               <property name="topMargin"><number>8</number></property>
+               <property name="rightMargin"><number>10</number></property>
+               <property name="bottomMargin"><number>10</number></property>
+               <item><layout class="QHBoxLayout" name="layout_str"><item><widget class="QLabel" name="label_str"><property name="minimumSize"><size><width>122</width><height>0</height></size></property><property name="text"><string>СИЛА</string></property><property name="font"><font><bold>true</bold></font></property></widget></item><item><widget class="QLineEdit" name="strEdit"><property name="minimumSize"><size><width>82</width><height>30</height></size></property><property name="maximumSize"><size><width>92</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="readOnly"><bool>true</bool></property><property name="font"><font><pointsize>11</pointsize><bold>true</bold></font></property></widget></item></layout></item>
+               <item><layout class="QHBoxLayout" name="layout_dex"><item><widget class="QLabel" name="label_dex"><property name="minimumSize"><size><width>122</width><height>0</height></size></property><property name="text"><string>ЛОВКОСТЬ</string></property><property name="font"><font><bold>true</bold></font></property></widget></item><item><widget class="QLineEdit" name="dexEdit"><property name="minimumSize"><size><width>82</width><height>30</height></size></property><property name="maximumSize"><size><width>92</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="readOnly"><bool>true</bool></property><property name="font"><font><pointsize>11</pointsize><bold>true</bold></font></property></widget></item></layout></item>
+               <item><layout class="QHBoxLayout" name="layout_con"><item><widget class="QLabel" name="label_con"><property name="minimumSize"><size><width>122</width><height>0</height></size></property><property name="text"><string>ТЕЛОСЛОЖЕНИЕ</string></property><property name="font"><font><bold>true</bold></font></property></widget></item><item><widget class="QLineEdit" name="conEdit"><property name="minimumSize"><size><width>82</width><height>30</height></size></property><property name="maximumSize"><size><width>92</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="readOnly"><bool>true</bool></property><property name="font"><font><pointsize>11</pointsize><bold>true</bold></font></property></widget></item></layout></item>
+               <item><layout class="QHBoxLayout" name="layout_int"><item><widget class="QLabel" name="label_int"><property name="minimumSize"><size><width>122</width><height>0</height></size></property><property name="text"><string>ИНТЕЛЛЕКТ</string></property><property name="font"><font><bold>true</bold></font></property></widget></item><item><widget class="QLineEdit" name="intEdit"><property name="minimumSize"><size><width>82</width><height>30</height></size></property><property name="maximumSize"><size><width>92</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="readOnly"><bool>true</bool></property><property name="font"><font><pointsize>11</pointsize><bold>true</bold></font></property></widget></item></layout></item>
+               <item><layout class="QHBoxLayout" name="layout_wis"><item><widget class="QLabel" name="label_wis"><property name="minimumSize"><size><width>122</width><height>0</height></size></property><property name="text"><string>МУДРОСТЬ</string></property><property name="font"><font><bold>true</bold></font></property></widget></item><item><widget class="QLineEdit" name="wisEdit"><property name="minimumSize"><size><width>82</width><height>30</height></size></property><property name="maximumSize"><size><width>92</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="readOnly"><bool>true</bool></property><property name="font"><font><pointsize>11</pointsize><bold>true</bold></font></property></widget></item></layout></item>
+               <item><layout class="QHBoxLayout" name="layout_cha"><item><widget class="QLabel" name="label_cha"><property name="minimumSize"><size><width>122</width><height>0</height></size></property><property name="text"><string>ХАРИЗМА</string></property><property name="font"><font><bold>true</bold></font></property></widget></item><item><widget class="QLineEdit" name="chaEdit"><property name="minimumSize"><size><width>82</width><height>30</height></size></property><property name="maximumSize"><size><width>92</width><height>16777215</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="readOnly"><bool>true</bool></property><property name="font"><font><pointsize>11</pointsize><bold>true</bold></font></property></widget></item></layout></item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="combatGroup">
+              <property name="minimumSize"><size><width>288</width><height>0</height></size></property>
+              <property name="maximumSize"><size><width>288</width><height>16777215</height></size></property>
+              <property name="title"><string>Боевые параметры</string></property>
+              <layout class="QGridLayout" name="gridLayout_Combat">
+               <property name="horizontalSpacing"><number>8</number></property>
+               <property name="verticalSpacing"><number>6</number></property>
+               <property name="leftMargin"><number>10</number></property>
+               <property name="topMargin"><number>8</number></property>
+               <property name="rightMargin"><number>10</number></property>
+               <property name="bottomMargin"><number>10</number></property>
+               <item row="0" column="0"><widget class="QLabel" name="label_ac"><property name="minimumSize"><size><width>68</width><height>0</height></size></property><property name="text"><string>КД (AC)</string></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
+               <item row="0" column="1"><widget class="QLabel" name="label_init"><property name="minimumSize"><size><width>90</width><height>0</height></size></property><property name="text"><string>Инициатива</string></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
+               <item row="0" column="2"><widget class="QLabel" name="label_speed"><property name="minimumSize"><size><width>78</width><height>0</height></size></property><property name="text"><string>Скорость</string></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
+               <item row="1" column="0"><widget class="QLineEdit" name="acEdit"><property name="minimumSize"><size><width>0</width><height>30</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="readOnly"><bool>true</bool></property></widget></item>
+               <item row="1" column="1"><widget class="QLineEdit" name="initiativeEdit"><property name="minimumSize"><size><width>0</width><height>30</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="readOnly"><bool>true</bool></property></widget></item>
+               <item row="1" column="2"><widget class="QLineEdit" name="speedEdit"><property name="minimumSize"><size><width>0</width><height>30</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="readOnly"><bool>true</bool></property></widget></item>
+               <item row="2" column="0" colspan="3"><widget class="Line" name="line_combat"><property name="orientation"><enum>Qt::Horizontal</enum></property></widget></item>
+               <item row="3" column="0"><widget class="QLabel" name="label_hp_max"><property name="text"><string>Хиты (Макс)</string></property></widget></item>
+               <item row="3" column="1" colspan="2"><widget class="QLineEdit" name="hpMaxEdit"><property name="minimumSize"><size><width>0</width><height>30</height></size></property><property name="readOnly"><bool>true</bool></property></widget></item>
+               <item row="4" column="0"><widget class="QLabel" name="label_hp_curr"><property name="text"><string>Текущие</string></property></widget></item>
+               <item row="4" column="1" colspan="2"><widget class="QLineEdit" name="hpCurrentEdit"><property name="minimumSize"><size><width>0</width><height>30</height></size></property></widget></item>
+               <item row="5" column="0"><widget class="QLabel" name="label_hp_temp"><property name="text"><string>Временные</string></property></widget></item>
+               <item row="5" column="1" colspan="2"><widget class="QLineEdit" name="hpTempEdit"><property name="minimumSize"><size><width>0</width><height>30</height></size></property></widget></item>
+              </layout>
+             </widget>
+            </item>
+            <item><spacer name="topGroupsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>20</height></size></property></spacer></item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="overviewGroup">
+           <property name="minimumSize"><size><width>548</width><height>0</height></size></property>
+           <property name="maximumSize"><size><width>548</width><height>16777215</height></size></property>
+           <property name="title"><string>Навыки и спасброски</string></property>
+           <layout class="QVBoxLayout" name="overviewLayout">
+            <property name="spacing"><number>8</number></property>
+            <item>
+             <layout class="QHBoxLayout" name="bonusLayout">
+              <item><widget class="QLabel" name="bonusCaptionLabel"><property name="text"><string>Бонус мастерства</string></property></widget></item>
+              <item><spacer name="bonusSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+              <item><widget class="QLabel" name="proficiencyBonusValueLabel"><property name="text"><string>—</string></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set></property><property name="font"><font><pointsize>14</pointsize><bold>true</bold></font></property></widget></item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="overviewColumnsLayout">
+              <property name="spacing"><number>16</number></property>
+             <item>
+              <widget class="QWidget" name="designerSavesColumn" native="true">
+               <layout class="QVBoxLayout" name="designerSavesColumnLayout">
+                <property name="leftMargin"><number>0</number></property>
+                <property name="topMargin"><number>0</number></property>
+                <property name="rightMargin"><number>0</number></property>
+                <property name="bottomMargin"><number>0</number></property>
+                <item><widget class="QLabel" name="designerSavesColumnTitle"><property name="text"><string>Спасброски</string></property><property name="font"><font><bold>true</bold></font></property></widget></item>
+                <item>
+                 <widget class="QLabel" name="designerSavesColumnRows">
+                  <property name="text"><string>○ Сила СИЛ —&#xa;○ Ловкость ЛОВ —&#xa;○ Телосложение ТЕЛ —&#xa;○ Интеллект ИНТ —&#xa;○ Мудрость МУД —&#xa;○ Харизма ХАР —</string></property>
+                  <property name="wordWrap"><bool>true</bool></property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item>
+              <widget class="QWidget" name="designerSkillsColumnOne" native="true">
+               <layout class="QVBoxLayout" name="designerSkillsColumnOneLayout">
+                <property name="leftMargin"><number>0</number></property>
+                <property name="topMargin"><number>0</number></property>
+                <property name="rightMargin"><number>0</number></property>
+                <property name="bottomMargin"><number>0</number></property>
+                <item><widget class="QLabel" name="designerSkillsColumnOneTitle"><property name="text"><string>Навыки</string></property><property name="font"><font><bold>true</bold></font></property></widget></item>
+                <item>
+                 <widget class="QLabel" name="designerSkillsColumnOneRows">
+                  <property name="text"><string>○ Акробатика ЛОВ —&#xa;○ Атлетика СИЛ —&#xa;○ Восприятие МУД —&#xa;○ Выживание МУД —&#xa;○ Выступление ХАР —&#xa;○ Запугивание ХАР —</string></property>
+                  <property name="wordWrap"><bool>true</bool></property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item>
+              <widget class="QWidget" name="designerSkillsColumnTwo" native="true">
+               <layout class="QVBoxLayout" name="designerSkillsColumnTwoLayout">
+                <property name="leftMargin"><number>0</number></property>
+                <property name="topMargin"><number>0</number></property>
+                <property name="rightMargin"><number>0</number></property>
+                <property name="bottomMargin"><number>0</number></property>
+                <item><widget class="QLabel" name="designerSkillsColumnTwoTitle"><property name="text"><string>Навыки</string></property><property name="font"><font><bold>true</bold></font></property></widget></item>
+                <item>
+                 <widget class="QLabel" name="designerSkillsColumnTwoRows">
+                  <property name="text"><string>○ Медицина МУД —&#xa;○ Обман ХАР —&#xa;○ Природа ИНТ —&#xa;○ Проницательность МУД —&#xa;○ Религия ИНТ —&#xa;○ Убеждение ХАР —</string></property>
+                  <property name="wordWrap"><bool>true</bool></property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QTabWidget" name="detailsTabs">
+        <property name="documentMode"><bool>true</bool></property>
+        <property name="currentIndex"><number>0</number></property>
+        <widget class="QWidget" name="historyTab">
+         <attribute name="title"><string>История</string></attribute>
+         <layout class="QVBoxLayout" name="historyLayout">
+          <property name="leftMargin"><number>10</number></property>
+          <property name="topMargin"><number>0</number></property>
+          <property name="rightMargin"><number>10</number></property>
+          <property name="bottomMargin"><number>0</number></property>
           <item>
-           <widget class="QLabel" name="label_str">
-            <property name="text">
-             <string>СИЛА</string>
-            </property>
-            <property name="font">
-             <font>
-              <bold>true</bold>
-             </font>
-            </property>
+           <widget class="QGroupBox" name="historyGroup">
+            <property name="title"><string>История и внешность</string></property>
+            <layout class="QVBoxLayout" name="historyGroupLayout">
+             <property name="spacing"><number>8</number></property>
+             <item>
+              <layout class="QGridLayout" name="gridLayout_App">
+               <property name="horizontalSpacing"><number>8</number></property>
+               <property name="verticalSpacing"><number>6</number></property>
+               <item row="0" column="0"><widget class="QLabel" name="label_age"><property name="text"><string>Возраст</string></property></widget></item>
+               <item row="0" column="1"><widget class="QLineEdit" name="ageEdit"/></item>
+               <item row="0" column="2"><widget class="QLabel" name="label_height"><property name="text"><string>Рост</string></property></widget></item>
+               <item row="0" column="3"><widget class="QLineEdit" name="heightEdit"/></item>
+               <item row="1" column="0"><widget class="QLabel" name="label_weight"><property name="text"><string>Вес</string></property></widget></item>
+               <item row="1" column="1"><widget class="QLineEdit" name="weightEdit"/></item>
+               <item row="1" column="2"><widget class="QLabel" name="label_skin"><property name="text"><string>Кожа</string></property></widget></item>
+               <item row="1" column="3"><widget class="QLineEdit" name="skinEdit"/></item>
+               <item row="2" column="0"><widget class="QLabel" name="label_hair"><property name="text"><string>Волосы</string></property></widget></item>
+               <item row="2" column="1" colspan="3"><widget class="QLineEdit" name="hairEdit"/></item>
+              </layout>
+             </item>
+             <item><widget class="QLabel" name="label_desc"><property name="text"><string>Описание внешности</string></property></widget></item>
+             <item><widget class="QTextEdit" name="appearanceEdit"><property name="minimumSize"><size><width>0</width><height>160</height></size></property><property name="acceptRichText"><bool>false</bool></property></widget></item>
+             <item><widget class="Line" name="historyDivider"><property name="orientation"><enum>Qt::Horizontal</enum></property></widget></item>
+             <item><widget class="QLabel" name="historyTitleLabel"><property name="text"><string>Личная история</string></property><property name="font"><font><bold>true</bold></font></property></widget></item>
+             <item><widget class="QTextEdit" name="historyEdit"><property name="minimumSize"><size><width>0</width><height>120</height></size></property><property name="placeholderText"><string>Происхождение, мотивация, связи, важные события и личная история персонажа.</string></property><property name="acceptRichText"><bool>false</bool></property></widget></item>
+            </layout>
            </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="strEdit">
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="font">
-             <font>
-              <pointsize>14</pointsize>
-              <bold>true</bold>
-             </font>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="layout_dex">
-          <item>
-           <widget class="QLabel" name="label_dex">
-            <property name="text">
-             <string>ЛОВКОСТЬ</string>
-            </property>
-            <property name="font">
-             <font>
-              <bold>true</bold>
-             </font>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="dexEdit">
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="font">
-              <font>
-               <pointsize>14</pointsize>
-               <bold>true</bold>
-              </font>
-             </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="layout_con">
-          <item>
-           <widget class="QLabel" name="label_con">
-            <property name="text">
-             <string>ТЕЛОСЛОЖЕНИЕ</string>
-            </property>
-            <property name="font">
-             <font>
-              <bold>true</bold>
-             </font>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="conEdit">
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="font">
-              <font>
-               <pointsize>14</pointsize>
-               <bold>true</bold>
-              </font>
-             </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="layout_int">
-          <item>
-           <widget class="QLabel" name="label_int">
-            <property name="text">
-             <string>ИНТЕЛЛЕКТ</string>
-            </property>
-            <property name="font">
-             <font>
-              <bold>true</bold>
-             </font>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="intEdit">
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="font">
-              <font>
-               <pointsize>14</pointsize>
-               <bold>true</bold>
-              </font>
-             </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="layout_wis">
-          <item>
-           <widget class="QLabel" name="label_wis">
-            <property name="text">
-             <string>МУДРОСТЬ</string>
-            </property>
-            <property name="font">
-             <font>
-              <bold>true</bold>
-             </font>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="wisEdit">
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="font">
-              <font>
-               <pointsize>14</pointsize>
-               <bold>true</bold>
-              </font>
-             </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="layout_cha">
-          <item>
-           <widget class="QLabel" name="label_cha">
-            <property name="text">
-             <string>ХАРИЗМА</string>
-            </property>
-            <property name="font">
-             <font>
-              <bold>true</bold>
-             </font>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="chaEdit">
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="font">
-              <font>
-               <pointsize>14</pointsize>
-               <bold>true</bold>
-              </font>
-             </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <spacer name="verticalSpacer">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>40</height>
-           </size>
-          </property>
-         </spacer>
-        </item>
-       </layout>
-      </widget>
-     </item>
-     <item>
-      <layout class="QVBoxLayout" name="verticalLayout_Center">
-       <item>
-        <widget class="QGroupBox" name="combatGroup">
-         <property name="title">
-          <string>Боевые параметры</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_Combat">
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_ac">
-            <property name="text">
-             <string>КД (AC)</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QLabel" name="label_init">
-            <property name="text">
-             <string>Инициатива</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QLabel" name="label_speed">
-            <property name="text">
-             <string>Скорость</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLineEdit" name="acEdit">
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QLineEdit" name="initiativeEdit">
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="2">
-           <widget class="QLineEdit" name="speedEdit">
-            <property name="alignment">
-             <set>Qt::AlignCenter</set>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="0" colspan="3">
-           <widget class="Line" name="line">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="label_hp_max">
-            <property name="text">
-             <string>Хиты (Макс)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1" colspan="2">
-           <widget class="QLineEdit" name="hpMaxEdit">
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="label_hp_curr">
-            <property name="text">
-             <string>Текущие</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1" colspan="2">
-           <widget class="QLineEdit" name="hpCurrentEdit"/>
-          </item>
-          <item row="5" column="0">
-           <widget class="QLabel" name="label_hp_temp">
-            <property name="text">
-             <string>Временные</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="1" colspan="2">
-           <widget class="QLineEdit" name="hpTempEdit"/>
           </item>
          </layout>
         </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="appearanceGroup">
-         <property name="title">
-          <string>Внешность</string>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_App">
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_age">
-            <property name="text">
-             <string>Возраст</string>
-            </property>
+        <widget class="QWidget" name="spellTab">
+         <attribute name="title"><string>Заклинания</string></attribute>
+         <layout class="QVBoxLayout" name="spellLayout">
+          <item><widget class="QLabel" name="spellcastingSummaryLabel"><property name="text"><string>У персонажа пока нет магии или заклинания ещё не выбраны.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          <item>
+           <widget class="QGroupBox" name="slotsGroup">
+            <property name="title"><string>Ячейки заклинаний</string></property>
+            <layout class="QVBoxLayout" name="slotsGroupLayout">
+             <item>
+              <widget class="QScrollArea" name="spellSlotsScrollArea">
+               <property name="widgetResizable"><bool>true</bool></property>
+               <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+               <widget class="QWidget" name="spellSlotsContainer">
+                <property name="geometry"><rect><x>0</x><y>0</y><width>620</width><height>90</height></rect></property>
+                <layout class="QVBoxLayout" name="spellSlotsLayout">
+                 <property name="leftMargin"><number>0</number></property>
+                 <property name="topMargin"><number>0</number></property>
+                 <property name="rightMargin"><number>0</number></property>
+                 <property name="bottomMargin"><number>0</number></property>
+                </layout>
+               </widget>
+              </widget>
+             </item>
+            </layout>
            </widget>
           </item>
-          <item row="0" column="1">
-           <widget class="QLineEdit" name="ageEdit"/>
-          </item>
-          <item row="0" column="2">
-           <widget class="QLabel" name="label_height">
-            <property name="text">
-             <string>Рост</string>
-            </property>
+          <item>
+           <widget class="QGroupBox" name="spellListGroup">
+            <property name="title"><string>Заклинания персонажа</string></property>
+            <layout class="QVBoxLayout" name="spellListLayout">
+             <item>
+              <layout class="QHBoxLayout" name="spellFilterLayout">
+               <item><widget class="QComboBox" name="spellClassFilter"><property name="visible"><bool>false</bool></property></widget></item>
+               <item><widget class="QLabel" name="spellLevelCaption"><property name="text"><string>Уровень:</string></property></widget></item>
+               <item><widget class="QComboBox" name="spellLevelFilter"/></item>
+               <item><widget class="QLabel" name="spellStateCaption"><property name="text"><string>Состояние:</string></property></widget></item>
+               <item><widget class="QComboBox" name="spellStateFilter"/></item>
+               <item><widget class="QLineEdit" name="spellSearchEdit"><property name="placeholderText"><string>Поиск по названию, школе или описанию...</string></property></widget></item>
+              </layout>
+             </item>
+             <item>
+              <widget class="QSplitter" name="spellSplitter">
+               <property name="orientation"><enum>Qt::Horizontal</enum></property>
+               <widget class="QTreeWidget" name="spellTree">
+                <property name="alternatingRowColors"><bool>true</bool></property>
+                <property name="rootIsDecorated"><bool>true</bool></property>
+                <column><property name="text"><string>Статус</string></property></column>
+                <column><property name="text"><string>Заклинание</string></property></column>
+                <column><property name="text"><string>Уровень</string></property></column>
+                <column><property name="text"><string>Класс</string></property></column>
+                <column><property name="text"><string>Каст</string></property></column>
+               </widget>
+               <widget class="QWidget" name="spellDetailsWidget">
+                <layout class="QVBoxLayout" name="spellDetailsLayout">
+                 <item><widget class="QLabel" name="spellDetailsTitleLabel"><property name="text"><string>Выберите заклинание</string></property><property name="font"><font><pointsize>14</pointsize><bold>true</bold></font></property></widget></item>
+                 <item><widget class="QLabel" name="spellDetailsMetaLabel"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+                 <item><widget class="QTextEdit" name="spellDetailsText"><property name="readOnly"><bool>true</bool></property></widget></item>
+                </layout>
+               </widget>
+              </widget>
+             </item>
+            </layout>
            </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QLineEdit" name="heightEdit"/>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="label_weight">
-            <property name="text">
-             <string>Вес</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QLineEdit" name="weightEdit"/>
-          </item>
-          <item row="1" column="2">
-           <widget class="QLabel" name="label_skin">
-            <property name="text">
-             <string>Кожа</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="3">
-           <widget class="QLineEdit" name="skinEdit"/>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="label_hair">
-            <property name="text">
-             <string>Волосы</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1" colspan="3">
-           <widget class="QLineEdit" name="hairEdit"/>
-          </item>
-          <item row="3" column="0" colspan="4">
-           <widget class="QLabel" name="label_desc">
-            <property name="text">
-             <string>Описание внешности</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="0" colspan="4">
-           <widget class="QTextEdit" name="appearanceEdit"/>
           </item>
          </layout>
         </widget>
-       </item>
-      </layout>
-     </item>
-    </layout>
+        <widget class="QWidget" name="featuresTab">
+         <attribute name="title"><string>Умения и владения</string></attribute>
+         <layout class="QVBoxLayout" name="featuresLayout">
+          <item>
+           <widget class="QGroupBox" name="proficiencyGroup">
+            <property name="title"><string>Владения и знания</string></property>
+            <layout class="QFormLayout" name="proficiencyLayout">
+             <item row="0" column="0"><widget class="QLabel" name="languagesCaption"><property name="text"><string>Языки:</string></property></widget></item>
+             <item row="0" column="1"><widget class="QLabel" name="languagesValueLabel"><property name="text"><string>—</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             <item row="1" column="0"><widget class="QLabel" name="skillsCaption"><property name="text"><string>Навыки:</string></property></widget></item>
+             <item row="1" column="1"><widget class="QLabel" name="skillsValueLabel"><property name="text"><string>—</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             <item row="2" column="0"><widget class="QLabel" name="toolsCaption"><property name="text"><string>Инструменты:</string></property></widget></item>
+             <item row="2" column="1"><widget class="QLabel" name="toolsValueLabel"><property name="text"><string>—</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             <item row="3" column="0"><widget class="QLabel" name="savesCaption"><property name="text"><string>Спасброски:</string></property></widget></item>
+             <item row="3" column="1"><widget class="QLabel" name="savesValueLabel"><property name="text"><string>—</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             <item row="4" column="0"><widget class="QLabel" name="armorCaption"><property name="text"><string>Доспехи:</string></property></widget></item>
+             <item row="4" column="1"><widget class="QLabel" name="armorValueLabel"><property name="text"><string>—</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             <item row="5" column="0"><widget class="QLabel" name="weaponsCaption"><property name="text"><string>Оружие:</string></property></widget></item>
+             <item row="5" column="1"><widget class="QLabel" name="weaponsValueLabel"><property name="text"><string>—</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QSplitter" name="featuresSplitter">
+            <property name="orientation"><enum>Qt::Horizontal</enum></property>
+            <widget class="QTreeWidget" name="featuresTree">
+             <property name="alternatingRowColors"><bool>true</bool></property>
+             <column><property name="text"><string>Источник</string></property></column>
+             <column><property name="text"><string>Умение / блок</string></property></column>
+            </widget>
+            <widget class="QTextEdit" name="featureDetailsText"><property name="readOnly"><bool>true</bool></property></widget>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="inventoryTab">
+         <attribute name="title"><string>Инвентарь</string></attribute>
+         <layout class="QVBoxLayout" name="inventoryLayout">
+          <item>
+           <widget class="QGroupBox" name="listsGroup">
+            <property name="title"><string>Инвентарь и атаки</string></property>
+            <layout class="QHBoxLayout" name="listsLayout">
+             <item><widget class="QListWidget" name="inventoryList"><property name="alternatingRowColors"><bool>true</bool></property></widget></item>
+             <item><widget class="QListWidget" name="attacksList"><property name="alternatingRowColors"><bool>true</bool></property></widget></item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
   </layout>
  </widget>

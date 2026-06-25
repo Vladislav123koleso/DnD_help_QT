@@ -15,11 +15,13 @@
 #include <QDebug>
 #include <QFileDialog>
 #include <QFontMetrics>
+#include <QFrame>
 #include <QPageSize>
 #include <QPainter>
 #include <QPdfWriter>
 #include <QRegularExpression>
 #include <QLineEdit>
+#include <QScrollArea>
 #include <QSplitter>
 #include <QTextEdit>
 #include <QDesktopServices>
@@ -3214,8 +3216,15 @@ void PlayerPage::setupUi()
 
     infoLayout->addLayout(charControlsLayout);
 
-    characterSheet = new CharacterSheet(charInfoPage);
-    infoLayout->addWidget(characterSheet, 1);
+    QScrollArea *characterSheetScroll = new QScrollArea(charInfoPage);
+    characterSheetScroll->setWidgetResizable(true);
+    characterSheetScroll->setFrameShape(QFrame::NoFrame);
+    characterSheetScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    characterSheetScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    characterSheet = new CharacterSheet(characterSheetScroll);
+    characterSheetScroll->setWidget(characterSheet);
+    infoLayout->addWidget(characterSheetScroll, 1);
 
     QPushButton *exportPdfBtn = new QPushButton(QStringLiteral("Экспорт в PDF"));
     connect(exportPdfBtn, &QPushButton::clicked, this, &PlayerPage::exportCurrentCharacterToPdf);

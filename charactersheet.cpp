@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFormLayout>
 #include <QFrame>
+#include <QFontMetrics>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHeaderView>
@@ -31,6 +32,7 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QStyle>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTimer>
@@ -821,90 +823,112 @@ bool CharacterSheet::eventFilter(QObject *watched, QEvent *event)
 
 void CharacterSheet::setupExtendedSections()
 {
-    ui->horizontalLayout_Main->setSpacing(8);
+    // Основная форма теперь находится в charactersheet.ui, чтобы ее можно было править в Qt Designer.
+    // Здесь остается только привязка логики и создание повторяющихся строк, зависящих от данных персонажа.
+    detailsTabs = ui->detailsTabs;
+    historyEdit = ui->historyEdit;
+    spellClassFilter = ui->spellClassFilter;
+    spellLevelFilter = ui->spellLevelFilter;
+    spellStateFilter = ui->spellStateFilter;
+    spellSearchEdit = ui->spellSearchEdit;
+    spellcastingSummaryLabel = ui->spellcastingSummaryLabel;
+    spellSlotsContainer = ui->spellSlotsContainer;
+    spellSlotsLayout = ui->spellSlotsLayout;
+    spellTree = ui->spellTree;
+    spellDetailsTitleLabel = ui->spellDetailsTitleLabel;
+    spellDetailsMetaLabel = ui->spellDetailsMetaLabel;
+    spellDetailsText = ui->spellDetailsText;
+    featuresTree = ui->featuresTree;
+    featureDetailsText = ui->featureDetailsText;
+    languagesValueLabel = ui->languagesValueLabel;
+    skillsValueLabel = ui->skillsValueLabel;
+    toolsValueLabel = ui->toolsValueLabel;
+    savesValueLabel = ui->savesValueLabel;
+    armorValueLabel = ui->armorValueLabel;
+    weaponsValueLabel = ui->weaponsValueLabel;
+    proficiencyBonusValueLabel = ui->proficiencyBonusValueLabel;
+    inventoryList = ui->inventoryList;
+    attacksList = ui->attacksList;
+
     ui->horizontalLayout_Main->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    ui->verticalLayout_Center->setSpacing(8);
-    ui->verticalLayout_Center->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    ui->gridLayout_Combat->setHorizontalSpacing(8);
-    ui->gridLayout_Combat->setVerticalSpacing(4);
-    const int compactTopGroupWidth = 210;
-    ui->statsGroup->setMinimumWidth(compactTopGroupWidth);
-    ui->statsGroup->setMaximumWidth(compactTopGroupWidth);
+    ui->horizontalLayout_Main->setSpacing(10);
+    ui->detailsAreaLayout->setStretch(0, 0);
+    ui->detailsAreaLayout->setStretch(1, 1);
+    ui->gridLayout_Header->setColumnStretch(1, 1);
+    ui->gridLayout_Header->setColumnStretch(3, 1);
+    ui->gridLayout_Header->setColumnStretch(5, 1);
+    ui->gridLayout_App->setColumnStretch(1, 1);
+    ui->gridLayout_App->setColumnStretch(3, 1);
+
+    const int statsGroupWidth = 250;
+    const int combatGroupWidth = 288;
+    const int leftColumnWidth = statsGroupWidth + combatGroupWidth + ui->horizontalLayout_Main->spacing();
+    ui->statsGroup->setMinimumWidth(statsGroupWidth);
+    ui->statsGroup->setMaximumWidth(statsGroupWidth);
     ui->statsGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Maximum);
-    ui->combatGroup->setMinimumWidth(compactTopGroupWidth);
-    ui->combatGroup->setMaximumWidth(compactTopGroupWidth);
+    ui->combatGroup->setMinimumWidth(combatGroupWidth);
+    ui->combatGroup->setMaximumWidth(combatGroupWidth);
     ui->combatGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Maximum);
-    ui->horizontalLayout_Main->setStretch(0, 0);
-    ui->horizontalLayout_Main->setStretch(1, 0);
-    ui->verticalLayout_Center->setAlignment(ui->combatGroup, Qt::AlignLeft | Qt::AlignTop);
-    ui->horizontalLayout_Main->addStretch(1);
-    ui->appearanceGroup->hide();
-    ui->verticalSpacer->changeSize(0, 0, QSizePolicy::Minimum, QSizePolicy::Fixed);
-    ui->verticalLayout_Stats->invalidate();
+    ui->overviewGroup->setMinimumWidth(leftColumnWidth);
+    ui->overviewGroup->setMaximumWidth(leftColumnWidth);
+    ui->overviewGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    ui->leftColumnWidget->setMinimumWidth(leftColumnWidth);
+    ui->leftColumnWidget->setMaximumWidth(leftColumnWidth);
+    ui->leftColumnWidget->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    ui->detailsTabs->setMinimumWidth(540);
+    ui->detailsTabs->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setMinimumWidth(leftColumnWidth + ui->detailsAreaLayout->spacing() + ui->detailsTabs->minimumWidth() + 24);
 
     for (QLineEdit *abilityEdit : {ui->strEdit, ui->dexEdit, ui->conEdit, ui->intEdit, ui->wisEdit, ui->chaEdit}) {
         QFont font = abilityEdit->font();
-        font.setPointSize(12);
+        font.setPointSize(11);
         abilityEdit->setFont(font);
+        abilityEdit->setMinimumWidth(82);
         abilityEdit->setMaximumWidth(92);
-        abilityEdit->setMinimumHeight(28);
+        abilityEdit->setMinimumHeight(30);
+        abilityEdit->setAlignment(Qt::AlignCenter);
     }
 
-    detailsTabs = new QTabWidget(this);
-    detailsTabs->setDocumentMode(true);
+    for (QLabel *abilityLabel : {ui->label_str, ui->label_dex, ui->label_con, ui->label_int, ui->label_wis, ui->label_cha}) {
+        abilityLabel->setMinimumWidth(qMax(122, abilityLabel->fontMetrics().horizontalAdvance(abilityLabel->text()) + 18));
+        abilityLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        abilityLabel->setToolTip(abilityLabel->text());
+    }
+
+    const QMap<QLabel*, int> combatLabelMinimums = {
+        {ui->label_ac, 68},
+        {ui->label_init, 90},
+        {ui->label_speed, 78}
+    };
+    for (auto it = combatLabelMinimums.cbegin(); it != combatLabelMinimums.cend(); ++it) {
+        QLabel *combatLabel = it.key();
+        combatLabel->setMinimumWidth(qMax(it.value(), combatLabel->fontMetrics().horizontalAdvance(combatLabel->text()) + 16));
+        combatLabel->setAlignment(Qt::AlignCenter);
+        QFont labelFont = combatLabel->font();
+        labelFont.setPointSize(9);
+        combatLabel->setFont(labelFont);
+        combatLabel->setToolTip(combatLabel->text());
+    }
+
+    for (QLabel *combatRowLabel : {ui->label_hp_max, ui->label_hp_curr, ui->label_hp_temp}) {
+        combatRowLabel->setMinimumWidth(qMax(88, combatRowLabel->fontMetrics().horizontalAdvance(combatRowLabel->text()) + 18));
+        combatRowLabel->setToolTip(combatRowLabel->text());
+    }
+
+    for (QLineEdit *combatEdit : {ui->acEdit, ui->initiativeEdit, ui->speedEdit, ui->hpMaxEdit, ui->hpCurrentEdit, ui->hpTempEdit}) {
+        combatEdit->setMinimumHeight(30);
+    }
+
     if (QTabBar *detailsTabBar = detailsTabs->tabBar()) {
         detailsTabBar->setExpanding(false);
         detailsTabBar->setUsesScrollButtons(true);
         detailsTabBar->setElideMode(Qt::ElideRight);
     }
 
-    QWidget *historyTab = new QWidget(detailsTabs);
-    QVBoxLayout *historyLayout = new QVBoxLayout(historyTab);
-    historyLayout->setContentsMargins(10, 0, 10, 0);
-    QGroupBox *historyGroup = new QGroupBox(QStringLiteral("История персонажа"), historyTab);
-    QVBoxLayout *historyGroupLayout = new QVBoxLayout(historyGroup);
-    historyEdit = new QTextEdit(historyGroup);
-    historyEdit->setPlaceholderText(QStringLiteral("Происхождение, мотивация, связи, важные события и личная история персонажа."));
-    enforceLeftToRightTextEdit(historyEdit);
-    historyEdit->installEventFilter(this);
-    historyGroup->setTitle(QStringLiteral("История и внешность"));
-
-    QGridLayout *appearanceLayout = new QGridLayout();
-    appearanceLayout->setHorizontalSpacing(8);
-    appearanceLayout->setVerticalSpacing(6);
-    appearanceLayout->setColumnStretch(1, 1);
-    appearanceLayout->setColumnStretch(3, 1);
-    appearanceLayout->addWidget(ui->label_age, 0, 0);
-    appearanceLayout->addWidget(ui->ageEdit, 0, 1);
-    appearanceLayout->addWidget(ui->label_height, 0, 2);
-    appearanceLayout->addWidget(ui->heightEdit, 0, 3);
-    appearanceLayout->addWidget(ui->label_weight, 1, 0);
-    appearanceLayout->addWidget(ui->weightEdit, 1, 1);
-    appearanceLayout->addWidget(ui->label_skin, 1, 2);
-    appearanceLayout->addWidget(ui->skinEdit, 1, 3);
-    appearanceLayout->addWidget(ui->label_hair, 2, 0);
-    appearanceLayout->addWidget(ui->hairEdit, 2, 1, 1, 3);
-    historyGroupLayout->addLayout(appearanceLayout);
-    historyGroupLayout->addWidget(ui->label_desc);
-    ui->appearanceEdit->setMinimumHeight(90);
     enforceLeftToRightTextEdit(ui->appearanceEdit);
+    enforceLeftToRightTextEdit(historyEdit);
     ui->appearanceEdit->installEventFilter(this);
-    historyGroupLayout->addWidget(ui->appearanceEdit);
-
-    QFrame *historyDivider = new QFrame(historyGroup);
-    historyDivider->setFrameShape(QFrame::HLine);
-    historyDivider->setFrameShadow(QFrame::Sunken);
-    historyGroupLayout->addWidget(historyDivider);
-
-    QLabel *historyTitleLabel = new QLabel(QStringLiteral("Личная история"), historyGroup);
-    QFont historyTitleFont = historyTitleLabel->font();
-    historyTitleFont.setBold(true);
-    historyGroupLayout->addWidget(historyTitleLabel);
-    historyTitleLabel->setFont(historyTitleFont);
-    historyGroupLayout->addWidget(historyEdit, 1);
-    historyLayout->addWidget(historyGroup);
-    historyLayout->addStretch();
-    detailsTabs->addTab(historyTab, QStringLiteral("История"));
+    historyEdit->installEventFilter(this);
 
     connect(ui->appearanceEdit, &QTextEdit::cursorPositionChanged, this, [this]() {
         enforceLeftToRightTextEdit(ui->appearanceEdit);
@@ -919,29 +943,77 @@ void CharacterSheet::setupExtendedSections()
         enforceLeftToRightTextEdit(historyEdit);
     });
 
-    QGroupBox *overviewGroup = new QGroupBox(QStringLiteral("Навыки и спасброски"), this);
-    overviewGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-    QVBoxLayout *overviewLayout = new QVBoxLayout(overviewGroup);
-    overviewLayout->setSpacing(8);
+    spellClassFilter->hide();
+    spellLevelFilter->clear();
+    spellLevelFilter->addItem(QStringLiteral("Все уровни"), -1);
+    spellLevelFilter->addItem(QStringLiteral("Заговор"), 0);
+    for (int level = 1; level <= 9; ++level) {
+        spellLevelFilter->addItem(QStringLiteral("%1 уровень").arg(level), level);
+    }
 
-    QHBoxLayout *bonusLayout = new QHBoxLayout();
-    QLabel *bonusCaptionLabel = new QLabel(QStringLiteral("Бонус мастерства"), overviewGroup);
-    proficiencyBonusValueLabel = new QLabel(QStringLiteral("—"), overviewGroup);
-    QFont bonusFont = proficiencyBonusValueLabel->font();
-    bonusFont.setBold(true);
-    bonusFont.setPointSize(14);
-    proficiencyBonusValueLabel->setFont(bonusFont);
-    proficiencyBonusValueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    bonusLayout->addWidget(bonusCaptionLabel);
-    bonusLayout->addStretch();
-    bonusLayout->addWidget(proficiencyBonusValueLabel);
-    overviewLayout->addLayout(bonusLayout);
+    spellStateFilter->clear();
+    spellStateFilter->addItem(QStringLiteral("Все состояния"), QStringLiteral("all"));
+    spellStateFilter->addItem(QStringLiteral("Подготовленные / известные"), QStringLiteral("active"));
+    spellStateFilter->addItem(QStringLiteral("Готовые к касту"), QStringLiteral("castable"));
+    spellSearchEdit->setPlaceholderText(QStringLiteral("Поиск по названию, школе или описанию..."));
 
-    QHBoxLayout *overviewColumnsLayout = new QHBoxLayout();
-    overviewColumnsLayout->setSpacing(16);
+    spellTree->setHeaderLabels({QStringLiteral("Статус"), QStringLiteral("Заклинание"), QStringLiteral("Уровень"), QStringLiteral("Класс"), QStringLiteral("Каст")});
+    spellTree->setAlternatingRowColors(true);
+    spellTree->setRootIsDecorated(true);
+    spellTree->setAllColumnsShowFocus(true);
+    spellTree->setIndentation(18);
+    spellTree->setStyleSheet(QStringLiteral(R"(
+QTreeWidget#spellTree {
+    padding: 0;
+    outline: 0;
+}
+
+QTreeWidget#spellTree::item {
+    border-radius: 0;
+    padding: 6px 8px;
+}
+
+QTreeWidget#spellTree::item:selected {
+    background-color: #22333b;
+    color: #f8f2e8;
+}
+
+QTreeWidget#spellTree::indicator {
+    width: 15px;
+    height: 15px;
+}
+)"));
+    spellTree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    spellTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
+    spellTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    spellTree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    spellTree->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    ui->spellSplitter->setStretchFactor(0, 3);
+    ui->spellSplitter->setStretchFactor(1, 2);
+
+    featuresTree->setHeaderLabels({QStringLiteral("Источник"), QStringLiteral("Умение / блок")});
+    featuresTree->setAlternatingRowColors(true);
+    featuresTree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    featuresTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
+    ui->featuresSplitter->setStretchFactor(0, 2);
+    ui->featuresSplitter->setStretchFactor(1, 3);
+
+    featureDetailsText->setReadOnly(true);
+    spellDetailsText->setReadOnly(true);
+    inventoryList->setAlternatingRowColors(true);
+    attacksList->setAlternatingRowColors(true);
+
+    for (QLabel *label : {languagesValueLabel, skillsValueLabel, toolsValueLabel, savesValueLabel, armorValueLabel, weaponsValueLabel}) {
+        label->setWordWrap(true);
+        label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    }
+
+    clearLayout(ui->overviewColumnsLayout);
+    proficiencyIndicatorLabels.clear();
+    proficiencyValueLabels.clear();
 
     auto addOverviewColumn = [&](const QString &title, const QList<NamedAbilityEntry> &entries, const QString &section) {
-        QWidget *columnWidget = new QWidget(overviewGroup);
+        QWidget *columnWidget = new QWidget(ui->overviewGroup);
         QVBoxLayout *columnLayout = new QVBoxLayout(columnWidget);
         columnLayout->setContentsMargins(0, 0, 0, 0);
         columnLayout->setSpacing(4);
@@ -969,15 +1041,26 @@ void CharacterSheet::setupExtendedSections()
             QLabel *nameLabel = new QLabel(entry.first, columnWidget);
             QLabel *abilityLabel = new QLabel(abilityShortLabel(entry.second), columnWidget);
             QLabel *valueLabel = new QLabel(QStringLiteral("—"), columnWidget);
+            QFont overviewFont = nameLabel->font();
+            overviewFont.setPointSize(9);
+            nameLabel->setFont(overviewFont);
+            abilityLabel->setFont(overviewFont);
+            valueLabel->setFont(overviewFont);
+            nameLabel->setWordWrap(true);
+            nameLabel->setToolTip(entry.first);
+            nameLabel->setMinimumWidth(78);
+            nameLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
             abilityLabel->setStyleSheet(QStringLiteral("color: #6b7280;"));
+            abilityLabel->setMinimumWidth(30);
             valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-            valueLabel->setMinimumWidth(36);
+            valueLabel->setMinimumWidth(30);
             valueLabel->setStyleSheet(QStringLiteral("font-weight: 600;"));
 
             grid->addWidget(indicatorLabel, row, 0);
             grid->addWidget(nameLabel, row, 1);
             grid->addWidget(abilityLabel, row, 2);
             grid->addWidget(valueLabel, row, 3);
+            grid->setColumnStretch(1, 1);
 
             const QString key = proficiencyEntryKey(section, entry.first);
             proficiencyIndicatorLabels.insert(key, indicatorLabel);
@@ -987,7 +1070,7 @@ void CharacterSheet::setupExtendedSections()
 
         columnLayout->addLayout(grid);
         columnLayout->addStretch();
-        overviewColumnsLayout->addWidget(columnWidget, 1);
+        ui->overviewColumnsLayout->addWidget(columnWidget, 1);
     };
 
     addOverviewColumn(QStringLiteral("Спасброски"), savingThrowDefinitions(), QStringLiteral("save"));
@@ -1005,192 +1088,6 @@ void CharacterSheet::setupExtendedSections()
     }
     addOverviewColumn(QStringLiteral("Навыки"), skillColumnOne, QStringLiteral("skill"));
     addOverviewColumn(QStringLiteral("Навыки"), skillColumnTwo, QStringLiteral("skill"));
-
-    overviewLayout->addLayout(overviewColumnsLayout);
-
-    QWidget *spellTab = new QWidget(detailsTabs);
-    QVBoxLayout *spellLayout = new QVBoxLayout(spellTab);
-
-    spellcastingSummaryLabel = new QLabel(spellTab);
-    spellcastingSummaryLabel->setWordWrap(true);
-    spellLayout->addWidget(spellcastingSummaryLabel);
-
-    QGroupBox *slotsGroup = new QGroupBox(QStringLiteral("Ячейки заклинаний"), spellTab);
-    QVBoxLayout *slotsGroupLayout = new QVBoxLayout(slotsGroup);
-    QScrollArea *slotsScrollArea = new QScrollArea(slotsGroup);
-    slotsScrollArea->setWidgetResizable(true);
-    slotsScrollArea->setFrameShape(QFrame::NoFrame);
-    spellSlotsContainer = new QWidget(slotsScrollArea);
-    spellSlotsLayout = new QVBoxLayout(spellSlotsContainer);
-    spellSlotsLayout->setContentsMargins(0, 0, 0, 0);
-    slotsScrollArea->setWidget(spellSlotsContainer);
-    slotsGroupLayout->addWidget(slotsScrollArea);
-    spellLayout->addWidget(slotsGroup);
-
-    QGroupBox *spellListGroup = new QGroupBox(QStringLiteral("Заклинания персонажа"), spellTab);
-    QVBoxLayout *spellListLayout = new QVBoxLayout(spellListGroup);
-    QHBoxLayout *spellFilterLayout = new QHBoxLayout();
-
-    spellClassFilter = new QComboBox(spellListGroup);
-    spellLevelFilter = new QComboBox(spellListGroup);
-    spellLevelFilter->addItem(QStringLiteral("Все уровни"), -1);
-    spellLevelFilter->addItem(QStringLiteral("Заговор"), 0);
-    for (int level = 1; level <= 9; ++level) {
-        spellLevelFilter->addItem(QStringLiteral("%1 уровень").arg(level), level);
-    }
-    spellStateFilter = new QComboBox(spellListGroup);
-    spellStateFilter->addItem(QStringLiteral("Все состояния"), QStringLiteral("all"));
-    spellStateFilter->addItem(QStringLiteral("Подготовленные / известные"), QStringLiteral("active"));
-    spellStateFilter->addItem(QStringLiteral("Готовые к касту"), QStringLiteral("castable"));
-    spellSearchEdit = new QLineEdit(spellListGroup);
-    spellSearchEdit->setPlaceholderText(QStringLiteral("Поиск по названию, школе или описанию..."));
-
-    spellFilterLayout->addWidget(new QLabel(QStringLiteral("Уровень:"), spellListGroup));
-    spellFilterLayout->addWidget(spellLevelFilter);
-    spellFilterLayout->addWidget(new QLabel(QStringLiteral("Состояние:"), spellListGroup));
-    spellFilterLayout->addWidget(spellStateFilter);
-    spellFilterLayout->addWidget(spellSearchEdit, 1);
-    spellListLayout->addLayout(spellFilterLayout);
-
-    QSplitter *spellSplitter = new QSplitter(Qt::Horizontal, spellListGroup);
-    spellTree = new QTreeWidget(spellSplitter);
-    spellTree->setHeaderLabels({QStringLiteral("Статус"), QStringLiteral("Заклинание"), QStringLiteral("Уровень"), QStringLiteral("Класс"), QStringLiteral("Каст")});
-    spellTree->setAlternatingRowColors(true);
-    spellTree->setRootIsDecorated(true);
-    spellTree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    spellTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
-    spellTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    spellTree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    spellTree->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-
-    QWidget *spellDetailsWidget = new QWidget(spellSplitter);
-    QVBoxLayout *spellDetailsLayout = new QVBoxLayout(spellDetailsWidget);
-    spellDetailsTitleLabel = new QLabel(QStringLiteral("Выберите заклинание"), spellDetailsWidget);
-    QFont spellTitleFont = spellDetailsTitleLabel->font();
-    spellTitleFont.setBold(true);
-    spellTitleFont.setPointSize(14);
-    spellDetailsTitleLabel->setFont(spellTitleFont);
-    spellDetailsMetaLabel = new QLabel(spellDetailsWidget);
-    spellDetailsMetaLabel->setWordWrap(true);
-    spellDetailsText = new QTextEdit(spellDetailsWidget);
-    spellDetailsText->setReadOnly(true);
-    spellDetailsLayout->addWidget(spellDetailsTitleLabel);
-    spellDetailsLayout->addWidget(spellDetailsMetaLabel);
-    spellDetailsLayout->addWidget(spellDetailsText, 1);
-
-    spellSplitter->setStretchFactor(0, 3);
-    spellSplitter->setStretchFactor(1, 2);
-    spellListLayout->addWidget(spellSplitter, 1);
-    spellLayout->addWidget(spellListGroup, 1);
-    detailsTabs->addTab(spellTab, QStringLiteral("Заклинания"));
-
-    QWidget *featuresTab = new QWidget(detailsTabs);
-    QVBoxLayout *featuresLayout = new QVBoxLayout(featuresTab);
-
-    QGroupBox *proficiencyGroup = new QGroupBox(QStringLiteral("Владения и знания"), featuresTab);
-    QFormLayout *proficiencyLayout = new QFormLayout(proficiencyGroup);
-    languagesValueLabel = new QLabel(proficiencyGroup);
-    skillsValueLabel = new QLabel(proficiencyGroup);
-    toolsValueLabel = new QLabel(proficiencyGroup);
-    savesValueLabel = new QLabel(proficiencyGroup);
-    armorValueLabel = new QLabel(proficiencyGroup);
-    weaponsValueLabel = new QLabel(proficiencyGroup);
-
-    for (QLabel *label : {languagesValueLabel, skillsValueLabel, toolsValueLabel, savesValueLabel, armorValueLabel, weaponsValueLabel}) {
-        label->setWordWrap(true);
-        label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    }
-
-    proficiencyLayout->addRow(QStringLiteral("Языки:"), languagesValueLabel);
-    proficiencyLayout->addRow(QStringLiteral("Навыки:"), skillsValueLabel);
-    proficiencyLayout->addRow(QStringLiteral("Инструменты:"), toolsValueLabel);
-    proficiencyLayout->addRow(QStringLiteral("Спасброски:"), savesValueLabel);
-    proficiencyLayout->addRow(QStringLiteral("Доспехи:"), armorValueLabel);
-    proficiencyLayout->addRow(QStringLiteral("Оружие:"), weaponsValueLabel);
-    featuresLayout->addWidget(proficiencyGroup);
-
-    QSplitter *featuresSplitter = new QSplitter(Qt::Horizontal, featuresTab);
-    featuresTree = new QTreeWidget(featuresSplitter);
-    featuresTree->setHeaderLabels({QStringLiteral("Источник"), QStringLiteral("Умение / блок")});
-    featuresTree->setAlternatingRowColors(true);
-    featuresTree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    featuresTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
-
-    QWidget *featuresRightWidget = new QWidget(featuresSplitter);
-    QVBoxLayout *featuresRightLayout = new QVBoxLayout(featuresRightWidget);
-
-    featureDetailsText = new QTextEdit(featuresRightWidget);
-    featureDetailsText->setReadOnly(true);
-    featuresRightLayout->addWidget(featureDetailsText, 1);
-
-    featuresSplitter->setStretchFactor(0, 2);
-    featuresSplitter->setStretchFactor(1, 3);
-    featuresLayout->addWidget(featuresSplitter, 1);
-    detailsTabs->addTab(featuresTab, QStringLiteral("Умения и владения"));
-
-    QWidget *inventoryTab = new QWidget(detailsTabs);
-    QVBoxLayout *inventoryLayout = new QVBoxLayout(inventoryTab);
-    QGroupBox *listsGroup = new QGroupBox(QStringLiteral("Инвентарь и атаки"), inventoryTab);
-    QHBoxLayout *listsLayout = new QHBoxLayout(listsGroup);
-    inventoryList = new QListWidget(listsGroup);
-    attacksList = new QListWidget(listsGroup);
-    inventoryList->setAlternatingRowColors(true);
-    attacksList->setAlternatingRowColors(true);
-    listsLayout->addWidget(inventoryList, 1);
-    listsLayout->addWidget(attacksList, 1);
-    inventoryLayout->addWidget(listsGroup, 1);
-    detailsTabs->addTab(inventoryTab, QStringLiteral("Инвентарь"));
-
-    QWidget *detailsAreaWidget = new QWidget(this);
-    QHBoxLayout *detailsAreaLayout = new QHBoxLayout(detailsAreaWidget);
-    detailsAreaLayout->setContentsMargins(0, 0, 0, 0);
-    detailsAreaLayout->setSpacing(12);
-
-    QWidget *leftColumnWidget = new QWidget(detailsAreaWidget);
-    QVBoxLayout *leftColumnLayout = new QVBoxLayout(leftColumnWidget);
-    leftColumnLayout->setContentsMargins(0, 0, 0, 0);
-    leftColumnLayout->setSpacing(10);
-
-    QWidget *rightColumnWidget = new QWidget(detailsAreaWidget);
-    QVBoxLayout *rightColumnLayout = new QVBoxLayout(rightColumnWidget);
-    rightColumnLayout->setContentsMargins(0, 0, 0, 0);
-    rightColumnLayout->setSpacing(0);
-
-    const int topGroupsSpacing = ui->horizontalLayout_Main->spacing();
-    const int leftColumnWidth = compactTopGroupWidth * 2 + topGroupsSpacing;
-
-    QWidget *topGroupsWidget = new QWidget(leftColumnWidget);
-    QHBoxLayout *topGroupsLayout = new QHBoxLayout(topGroupsWidget);
-    topGroupsLayout->setContentsMargins(0, 0, 0, 0);
-    topGroupsLayout->setSpacing(topGroupsSpacing);
-    topGroupsLayout->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-
-    ui->horizontalLayout_Main->removeWidget(ui->statsGroup);
-    ui->verticalLayout_Center->removeWidget(ui->combatGroup);
-
-    topGroupsLayout->addWidget(ui->statsGroup, 0, Qt::AlignLeft | Qt::AlignTop);
-    topGroupsLayout->addWidget(ui->combatGroup, 0, Qt::AlignLeft | Qt::AlignTop);
-    topGroupsLayout->addStretch(1);
-
-    if (QLayoutItem *oldMainItem = ui->verticalLayout->takeAt(1)) {
-        delete oldMainItem;
-    }
-
-    leftColumnLayout->addWidget(topGroupsWidget, 0);
-    overviewGroup->setMinimumWidth(leftColumnWidth);
-    overviewGroup->setMaximumWidth(leftColumnWidth);
-    overviewGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-    leftColumnLayout->addWidget(overviewGroup, 1);
-
-    rightColumnLayout->addWidget(detailsTabs, 1);
-
-    leftColumnWidget->setMinimumWidth(leftColumnWidth);
-    leftColumnWidget->setMaximumWidth(leftColumnWidth);
-    leftColumnWidget->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-    rightColumnWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    detailsAreaLayout->addWidget(leftColumnWidget, 0);
-    detailsAreaLayout->addWidget(rightColumnWidget, 1);
-    ui->verticalLayout->addWidget(detailsAreaWidget, 1);
 
     connect(spellLevelFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CharacterSheet::onSpellFiltersChanged);
     connect(spellStateFilter, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CharacterSheet::onSpellFiltersChanged);
@@ -1930,7 +1827,13 @@ void CharacterSheet::rebuildSpellTree()
     const auto ensureClassItem = [&](const QString &className) {
         if (!classItems.contains(className)) {
             QTreeWidgetItem *classItem = new QTreeWidgetItem(spellTree);
-            classItem->setText(1, className);
+            classItem->setText(0, className);
+            classItem->setIcon(0, spellTree->style()->standardIcon(QStyle::SP_DirOpenIcon));
+            classItem->setFirstColumnSpanned(true);
+            classItem->setFlags(classItem->flags() & ~Qt::ItemIsSelectable);
+            QFont groupFont = classItem->font(0);
+            groupFont.setBold(true);
+            classItem->setFont(0, groupFont);
             classItem->setExpanded(true);
             classItems.insert(className, classItem);
         }
@@ -1940,7 +1843,13 @@ void CharacterSheet::rebuildSpellTree()
     const auto ensureLevelItem = [&](const QString &className, int spellLevel) {
         if (!levelItems[className].contains(spellLevel)) {
             QTreeWidgetItem *levelItem = new QTreeWidgetItem(ensureClassItem(className));
-            levelItem->setText(1, spellLevelLabel(spellLevel));
+            levelItem->setText(0, spellLevelLabel(spellLevel));
+            levelItem->setIcon(0, spellTree->style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+            levelItem->setFirstColumnSpanned(true);
+            levelItem->setFlags(levelItem->flags() & ~Qt::ItemIsSelectable);
+            QFont levelFont = levelItem->font(0);
+            levelFont.setBold(true);
+            levelItem->setFont(0, levelFont);
             levelItem->setExpanded(true);
             levelItems[className].insert(spellLevel, levelItem);
         }
@@ -1999,10 +1908,12 @@ void CharacterSheet::rebuildSpellTree()
         item->setData(0, Qt::UserRole + 12, spell.source);
 
         if (mutablePrepared) {
+            item->setText(0, prepared ? QStringLiteral("Подготовлено") : statusLabel);
             item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
             item->setCheckState(0, prepared ? Qt::Checked : Qt::Unchecked);
         } else {
             item->setText(0, statusLabel);
+            item->setIcon(0, spellTree->style()->standardIcon(QStyle::SP_DialogApplyButton));
         }
 
         if (!firstSpellItem) {
